@@ -28,10 +28,13 @@ x86/
 [Aa][Rr][Mm]64/
 bld/
 [Bb]in/
+[Bb]in-init/
 [Oo]bj/
 [Oo]ut/
 [Ll]og/
 [Ll]ogs/
+bin/
+bin-int/
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/
@@ -362,7 +365,3 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 
-#Directories
-.vs/
-bin/
-bin-int/
