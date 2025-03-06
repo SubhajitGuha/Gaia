@@ -51,6 +51,9 @@ namespace Gaia {
 				break;
 			(*--it)->OnEvent(e);
 		}
+
+		//TODO remove this
+		Vulkan::GetVulkanContext()->m_renderer->OnEvent(e); //should be done on the client side
 	}
 
 	void Application::PushLayer(Layer* layer)
@@ -86,6 +89,9 @@ namespace Gaia {
 			for (Layer* layer : m_layerstack)
 				layer->OnUpdate(deltaTime);
 
+			//TODO remove this
+			Vulkan::GetVulkanContext()->m_renderer->OnUpdate(deltaTime);
+			
 			//for ImguiLayers
 			m_ImGuiLayer->Begin();
 			for (Layer* layer : m_layerstack)

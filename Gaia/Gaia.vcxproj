@@ -81,14 +81,14 @@
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <Lib>
-      <AdditionalDependencies>$(VULKAN_SDK)\lib\vulkan-1.lib;$(VULKAN_SDK)\lib\SPIRV-Tools.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-diff.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-link.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-lint.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-opt.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-reduce.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-shared.lib;$(VULKAN_SDK)\lib\SPIRV.lib;$(VULKAN_SDK)\lib\glslang.lib;$(VULKAN_SDK)\lib\slang.lib;$(VULKAN_SDK)\lib\slang-rt.lib;$(VULKAN_SDK)\lib\glslang-default-resource-limits.lib;$(VULKAN_SDK)\lib\MachineIndependent.lib;$(VULKAN_SDK)\lib\GenericCodeGen.lib;$(VULKAN_SDK)\lib\spirv-cross-glsl.lib;$(VULKAN_SDK)\lib\spirv-cross-hlsl.lib;$(VULKAN_SDK)\lib\spirv-cross-util.lib;$(VULKAN_SDK)\lib\spirv-cross-reflect.lib;opengl32.lib;Normaliz.lib;Ws2_32.lib;Wldap32.lib;Crypt32.lib;advapi32.lib;vendor\Curl\lib\libcurl_a_debug.lib;vendor\assimp\lib\Release\assimp-vc142-mt.lib;vendor\physx_x64-windows\lib\LowLevel_static_64.lib;vendor\physx_x64-windows\lib\LowLevelAABB_static_64.lib;vendor\physx_x64-windows\lib\LowLevelDynamics_static_64.lib;vendor\physx_x64-windows\lib\PhysX_64.lib;vendor\physx_x64-windows\lib\PhysXCharacterKinematic_static_64.lib;vendor\physx_x64-windows\lib\PhysXCommon_64.lib;vendor\physx_x64-windows\lib\PhysXCooking_64.lib;vendor\physx_x64-windows\lib\PhysXExtensions_static_64.lib;vendor\physx_x64-windows\lib\PhysXFoundation_64.lib;vendor\physx_x64-windows\lib\PhysXPvdSDK_static_64.lib;vendor\physx_x64-windows\lib\PhysXTask_static_64.lib;vendor\physx_x64-windows\lib\PhysXVehicle_static_64.lib;vendor\physx_x64-windows\lib\SceneQuery_static_64.lib;vendor\physx_x64-windows\lib\SimulationController_static_64.lib;vendor\oidn\lib\OpenImageDenoise.lib;vendor\oidn\lib\OpenImageDenoise_core.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(VULKAN_SDK)\lib\vulkan-1.lib;$(VULKAN_SDK)\lib\SPIRV-Tools.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-diff.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-link.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-lint.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-opt.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-reduce.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-shared.lib;$(VULKAN_SDK)\lib\SPIRV.lib;$(VULKAN_SDK)\lib\glslang.lib;$(VULKAN_SDK)\lib\slang.lib;$(VULKAN_SDK)\lib\slang-rt.lib;$(VULKAN_SDK)\lib\glslang-default-resource-limits.lib;$(VULKAN_SDK)\lib\MachineIndependent.lib;$(VULKAN_SDK)\lib\GenericCodeGen.lib;$(VULKAN_SDK)\lib\spirv-cross-glsl.lib;$(VULKAN_SDK)\lib\spirv-cross-hlsl.lib;$(VULKAN_SDK)\lib\spirv-cross-util.lib;$(VULKAN_SDK)\lib\spirv-cross-reflect.lib;opengl32.lib;Normaliz.lib;Ws2_32.lib;Wldap32.lib;Crypt32.lib;advapi32.lib;vendor\Curl\lib\libcurl_a_debug.lib;vendor\assimp\lib\x64\assimp-vc143-mt.lib;vendor\physx_x64-windows\lib\LowLevel_static_64.lib;vendor\physx_x64-windows\lib\LowLevelAABB_static_64.lib;vendor\physx_x64-windows\lib\LowLevelDynamics_static_64.lib;vendor\physx_x64-windows\lib\PhysX_64.lib;vendor\physx_x64-windows\lib\PhysXCharacterKinematic_static_64.lib;vendor\physx_x64-windows\lib\PhysXCommon_64.lib;vendor\physx_x64-windows\lib\PhysXCooking_64.lib;vendor\physx_x64-windows\lib\PhysXExtensions_static_64.lib;vendor\physx_x64-windows\lib\PhysXFoundation_64.lib;vendor\physx_x64-windows\lib\PhysXPvdSDK_static_64.lib;vendor\physx_x64-windows\lib\PhysXTask_static_64.lib;vendor\physx_x64-windows\lib\PhysXVehicle_static_64.lib;vendor\physx_x64-windows\lib\SceneQuery_static_64.lib;vendor\physx_x64-windows\lib\SimulationController_static_64.lib;vendor\oidn\lib\OpenImageDenoise.lib;vendor\oidn\lib\OpenImageDenoise_core.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(VULKAN_SDK)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
@@ -105,7 +105,7 @@
       <MinimalRebuild>false</MinimalRebuild>
       <StringPooling>true</StringPooling>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -113,7 +113,7 @@
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
     <Lib>
-      <AdditionalDependencies>$(VULKAN_SDK)\lib\vulkan-1.lib;$(VULKAN_SDK)\lib\SPIRV-Tools.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-diff.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-link.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-lint.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-opt.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-reduce.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-shared.lib;$(VULKAN_SDK)\lib\SPIRV.lib;$(VULKAN_SDK)\lib\glslang.lib;$(VULKAN_SDK)\lib\slang.lib;$(VULKAN_SDK)\lib\slang-rt.lib;$(VULKAN_SDK)\lib\glslang-default-resource-limits.lib;$(VULKAN_SDK)\lib\MachineIndependent.lib;$(VULKAN_SDK)\lib\GenericCodeGen.lib;$(VULKAN_SDK)\lib\spirv-cross-glsl.lib;$(VULKAN_SDK)\lib\spirv-cross-hlsl.lib;$(VULKAN_SDK)\lib\spirv-cross-util.lib;$(VULKAN_SDK)\lib\spirv-cross-reflect.lib;opengl32.lib;Normaliz.lib;Ws2_32.lib;Wldap32.lib;Crypt32.lib;advapi32.lib;vendor\Curl\lib\libcurl_a_debug.lib;vendor\assimp\lib\Release\assimp-vc142-mt.lib;vendor\physx_x64-windows\lib\LowLevel_static_64.lib;vendor\physx_x64-windows\lib\LowLevelAABB_static_64.lib;vendor\physx_x64-windows\lib\LowLevelDynamics_static_64.lib;vendor\physx_x64-windows\lib\PhysX_64.lib;vendor\physx_x64-windows\lib\PhysXCharacterKinematic_static_64.lib;vendor\physx_x64-windows\lib\PhysXCommon_64.lib;vendor\physx_x64-windows\lib\PhysXCooking_64.lib;vendor\physx_x64-windows\lib\PhysXExtensions_static_64.lib;vendor\physx_x64-windows\lib\PhysXFoundation_64.lib;vendor\physx_x64-windows\lib\PhysXPvdSDK_static_64.lib;vendor\physx_x64-windows\lib\PhysXTask_static_64.lib;vendor\physx_x64-windows\lib\PhysXVehicle_static_64.lib;vendor\physx_x64-windows\lib\SceneQuery_static_64.lib;vendor\physx_x64-windows\lib\SimulationController_static_64.lib;vendor\oidn\lib\OpenImageDenoise.lib;vendor\oidn\lib\OpenImageDenoise_core.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(VULKAN_SDK)\lib\vulkan-1.lib;$(VULKAN_SDK)\lib\SPIRV-Tools.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-diff.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-link.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-lint.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-opt.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-reduce.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-shared.lib;$(VULKAN_SDK)\lib\SPIRV.lib;$(VULKAN_SDK)\lib\glslang.lib;$(VULKAN_SDK)\lib\slang.lib;$(VULKAN_SDK)\lib\slang-rt.lib;$(VULKAN_SDK)\lib\glslang-default-resource-limits.lib;$(VULKAN_SDK)\lib\MachineIndependent.lib;$(VULKAN_SDK)\lib\GenericCodeGen.lib;$(VULKAN_SDK)\lib\spirv-cross-glsl.lib;$(VULKAN_SDK)\lib\spirv-cross-hlsl.lib;$(VULKAN_SDK)\lib\spirv-cross-util.lib;$(VULKAN_SDK)\lib\spirv-cross-reflect.lib;opengl32.lib;Normaliz.lib;Ws2_32.lib;Wldap32.lib;Crypt32.lib;advapi32.lib;vendor\Curl\lib\libcurl_a_debug.lib;vendor\assimp\lib\x64\assimp-vc143-mt.lib;vendor\physx_x64-windows\lib\LowLevel_static_64.lib;vendor\physx_x64-windows\lib\LowLevelAABB_static_64.lib;vendor\physx_x64-windows\lib\LowLevelDynamics_static_64.lib;vendor\physx_x64-windows\lib\PhysX_64.lib;vendor\physx_x64-windows\lib\PhysXCharacterKinematic_static_64.lib;vendor\physx_x64-windows\lib\PhysXCommon_64.lib;vendor\physx_x64-windows\lib\PhysXCooking_64.lib;vendor\physx_x64-windows\lib\PhysXExtensions_static_64.lib;vendor\physx_x64-windows\lib\PhysXFoundation_64.lib;vendor\physx_x64-windows\lib\PhysXPvdSDK_static_64.lib;vendor\physx_x64-windows\lib\PhysXTask_static_64.lib;vendor\physx_x64-windows\lib\PhysXVehicle_static_64.lib;vendor\physx_x64-windows\lib\SceneQuery_static_64.lib;vendor\physx_x64-windows\lib\SimulationController_static_64.lib;vendor\oidn\lib\OpenImageDenoise.lib;vendor\oidn\lib\OpenImageDenoise_core.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(VULKAN_SDK)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
@@ -130,7 +130,7 @@
       <MinimalRebuild>false</MinimalRebuild>
       <StringPooling>true</StringPooling>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -138,7 +138,7 @@
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
     <Lib>
-      <AdditionalDependencies>$(VULKAN_SDK)\lib\vulkan-1.lib;$(VULKAN_SDK)\lib\SPIRV-Tools.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-diff.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-link.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-lint.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-opt.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-reduce.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-shared.lib;$(VULKAN_SDK)\lib\SPIRV.lib;$(VULKAN_SDK)\lib\glslang.lib;$(VULKAN_SDK)\lib\slang.lib;$(VULKAN_SDK)\lib\slang-rt.lib;$(VULKAN_SDK)\lib\glslang-default-resource-limits.lib;$(VULKAN_SDK)\lib\MachineIndependent.lib;$(VULKAN_SDK)\lib\GenericCodeGen.lib;$(VULKAN_SDK)\lib\spirv-cross-glsl.lib;$(VULKAN_SDK)\lib\spirv-cross-hlsl.lib;$(VULKAN_SDK)\lib\spirv-cross-util.lib;$(VULKAN_SDK)\lib\spirv-cross-reflect.lib;opengl32.lib;Normaliz.lib;Ws2_32.lib;Wldap32.lib;Crypt32.lib;advapi32.lib;vendor\Curl\lib\libcurl_a_debug.lib;vendor\assimp\lib\Release\assimp-vc142-mt.lib;vendor\physx_x64-windows\lib\LowLevel_static_64.lib;vendor\physx_x64-windows\lib\LowLevelAABB_static_64.lib;vendor\physx_x64-windows\lib\LowLevelDynamics_static_64.lib;vendor\physx_x64-windows\lib\PhysX_64.lib;vendor\physx_x64-windows\lib\PhysXCharacterKinematic_static_64.lib;vendor\physx_x64-windows\lib\PhysXCommon_64.lib;vendor\physx_x64-windows\lib\PhysXCooking_64.lib;vendor\physx_x64-windows\lib\PhysXExtensions_static_64.lib;vendor\physx_x64-windows\lib\PhysXFoundation_64.lib;vendor\physx_x64-windows\lib\PhysXPvdSDK_static_64.lib;vendor\physx_x64-windows\lib\PhysXTask_static_64.lib;vendor\physx_x64-windows\lib\PhysXVehicle_static_64.lib;vendor\physx_x64-windows\lib\SceneQuery_static_64.lib;vendor\physx_x64-windows\lib\SimulationController_static_64.lib;vendor\oidn\lib\OpenImageDenoise.lib;vendor\oidn\lib\OpenImageDenoise_core.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(VULKAN_SDK)\lib\vulkan-1.lib;$(VULKAN_SDK)\lib\SPIRV-Tools.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-diff.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-link.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-lint.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-opt.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-reduce.lib;$(VULKAN_SDK)\lib\SPIRV-Tools-shared.lib;$(VULKAN_SDK)\lib\SPIRV.lib;$(VULKAN_SDK)\lib\glslang.lib;$(VULKAN_SDK)\lib\slang.lib;$(VULKAN_SDK)\lib\slang-rt.lib;$(VULKAN_SDK)\lib\glslang-default-resource-limits.lib;$(VULKAN_SDK)\lib\MachineIndependent.lib;$(VULKAN_SDK)\lib\GenericCodeGen.lib;$(VULKAN_SDK)\lib\spirv-cross-glsl.lib;$(VULKAN_SDK)\lib\spirv-cross-hlsl.lib;$(VULKAN_SDK)\lib\spirv-cross-util.lib;$(VULKAN_SDK)\lib\spirv-cross-reflect.lib;opengl32.lib;Normaliz.lib;Ws2_32.lib;Wldap32.lib;Crypt32.lib;advapi32.lib;vendor\Curl\lib\libcurl_a_debug.lib;vendor\assimp\lib\x64\assimp-vc143-mt.lib;vendor\physx_x64-windows\lib\LowLevel_static_64.lib;vendor\physx_x64-windows\lib\LowLevelAABB_static_64.lib;vendor\physx_x64-windows\lib\LowLevelDynamics_static_64.lib;vendor\physx_x64-windows\lib\PhysX_64.lib;vendor\physx_x64-windows\lib\PhysXCharacterKinematic_static_64.lib;vendor\physx_x64-windows\lib\PhysXCommon_64.lib;vendor\physx_x64-windows\lib\PhysXCooking_64.lib;vendor\physx_x64-windows\lib\PhysXExtensions_static_64.lib;vendor\physx_x64-windows\lib\PhysXFoundation_64.lib;vendor\physx_x64-windows\lib\PhysXPvdSDK_static_64.lib;vendor\physx_x64-windows\lib\PhysXTask_static_64.lib;vendor\physx_x64-windows\lib\PhysXVehicle_static_64.lib;vendor\physx_x64-windows\lib\SceneQuery_static_64.lib;vendor\physx_x64-windows\lib\SimulationController_static_64.lib;vendor\oidn\lib\OpenImageDenoise.lib;vendor\oidn\lib\OpenImageDenoise_core.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(VULKAN_SDK)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
@@ -151,13 +151,28 @@
     <ClInclude Include="src\Gaia\Events\KeyEvent.h" />
     <ClInclude Include="src\Gaia\Events\MouseEvent.h" />
     <ClInclude Include="src\Gaia\GaiaCodes.h" />
+    <ClInclude Include="src\Gaia\GltfLoader\stb_image.h" />
+    <ClInclude Include="src\Gaia\GltfLoader\stb_image_write.h" />
+    <ClInclude Include="src\Gaia\GltfLoader\tiny_gltf.h" />
     <ClInclude Include="src\Gaia\ImGui\ImGuiLayer.h" />
     <ClInclude Include="src\Gaia\Input.h" />
     <ClInclude Include="src\Gaia\Layer.h" />
     <ClInclude Include="src\Gaia\LayerStack.h" />
+    <ClInclude Include="src\Gaia\LoadMesh.h" />
     <ClInclude Include="src\Gaia\Log.h" />
+    <ClInclude Include="src\Gaia\Renderer\Cameras\Camera.h" />
+    <ClInclude Include="src\Gaia\Renderer\Cameras\EditorCamera.h" />
+    <ClInclude Include="src\Gaia\Renderer\Cameras\SceneCamera.h" />
+    <ClInclude Include="src\Gaia\Renderer\GaiaRenderer.h" />
+    <ClInclude Include="src\Gaia\Renderer\Pool.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkBootstrap.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkBootstrapDispatch.h" />
+    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkBuffer.h" />
+    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkDescriptorSet.h" />
+    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkInitializers.h" />
+    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkPipeline.h" />
+    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkRenderer.h" />
+    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkUtils.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\Vulkan.h" />
     <ClInclude Include="src\Gaia\TimeSteps.h" />
     <ClInclude Include="src\Gaia\Window.h" />
@@ -176,7 +191,6 @@
     <ClInclude Include="vendor\Curl\include\curl\typecheck-gcc.h" />
     <ClInclude Include="vendor\Curl\include\curl\urlapi.h" />
     <ClInclude Include="vendor\Curl\include\curl\websockets.h" />
-    <ClInclude Include="vendor\assimp\include\assimp\AssertHandler.h" />
     <ClInclude Include="vendor\assimp\include\assimp\Base64.hpp" />
     <ClInclude Include="vendor\assimp\include\assimp\BaseImporter.h" />
     <ClInclude Include="vendor\assimp\include\assimp\Bitmap.h" />
@@ -455,10 +469,7 @@
     <ClInclude Include="vendor\physx_x64-windows\include\vehicle\PxVehicleWheels.h" />
     <ClInclude Include="vendor\stb_image\stb_image.h" />
     <ClInclude Include="vendor\stb_image\stb_image_resize.h" />
-    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkInitializers.h" />
-    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkUtils.h" />
-    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkPipeline.h" />
-    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkRenderer.h" />
+    <ClInclude Include="src\Gaia\Renderer\Vulkan\VulkanClasses.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Gaia\Application.cpp" />
@@ -466,8 +477,18 @@
     <ClCompile Include="src\Gaia\ImGui\ImGuiLayer.cpp" />
     <ClCompile Include="src\Gaia\Layer.cpp" />
     <ClCompile Include="src\Gaia\LayerStack.cpp" />
+    <ClCompile Include="src\Gaia\LoadMesh.cpp" />
     <ClCompile Include="src\Gaia\Log.cpp" />
+    <ClCompile Include="src\Gaia\Renderer\Cameras\Camera.cpp" />
+    <ClCompile Include="src\Gaia\Renderer\Cameras\EditorCamera.cpp" />
+    <ClCompile Include="src\Gaia\Renderer\Cameras\SceneCamera.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkBootstrap.cpp" />
+    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkBuffer.cpp" />
+    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkDescriptorSet.cpp" />
+    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkInitializers.cpp" />
+    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkPipeline.cpp" />
+    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkRenderer.cpp" />
+    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkUtils.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\Vulkan.cpp" />
     <ClCompile Include="src\Gaia\Window.cpp" />
     <ClCompile Include="src\Gaia\Window\WindowsInput.cpp" />
@@ -478,10 +499,7 @@
     <ClCompile Include="vendor\jsoncpp\jsoncpp.cpp" />
     <ClCompile Include="vendor\stb_image\stb_image.cpp" />
     <ClCompile Include="vendor\stb_image\stb_image_resize.cpp" />
-    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkInitializers.cpp" />
-    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkUtils.cpp" />
-    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkPipeline.cpp" />
-    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkRenderer.cpp" />
+    <ClCompile Include="src\Gaia\Renderer\Vulkan\VulkanClasses.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="vendor\GLFW\GLFW.vcxproj">
@@ -490,11 +508,6 @@
     <ProjectReference Include="vendor\imgui\ImGui.vcxproj">
       <Project>{C0FF640D-2C14-8DBE-F595-301E616989EF}</Project>
     </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="src\Gaia\Renderer\Shaders\compile.bat" />
-    <None Include="src\Gaia\Renderer\Shaders\frag_shader.frag" />
-    <None Include="src\Gaia\Renderer\Shaders\vert_shader.vert" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

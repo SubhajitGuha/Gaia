@@ -36,7 +36,7 @@ project "Gaia"
 	kind "StaticLib"
 	language "c++"
 	staticruntime "off"
-	cppdialect "c++17"
+	cppdialect "c++20"
 
 	targetdir ("bin/"..outputdir.."/%{prj.name}")
 	objdir ("bin-int/"..outputdir.."/%{prj.name}")
@@ -122,7 +122,7 @@ project "Gaia"
 		"Crypt32.lib",
 		"advapi32.lib",
 		"Gaia/vendor/Curl/lib/libcurl_a_debug.lib",
-		"Gaia/vendor/assimp/lib/Release/assimp-vc142-mt.lib",
+		"Gaia/vendor/assimp/lib/x64/assimp-vc143-mt.lib",
 		"Gaia/vendor/physx_x64-windows/lib/LowLevel_static_64.lib",
 		"Gaia/vendor/physx_x64-windows/lib/LowLevelAABB_static_64.lib",
 		"Gaia/vendor/physx_x64-windows/lib/LowLevelDynamics_static_64.lib",
@@ -181,7 +181,7 @@ project "Gaia_Editor"
 	kind "ConsoleApp"
 	language "c++"
 	staticruntime "off"
-	cppdialect "c++17"
+	cppdialect "c++20"
 
 	targetdir ("bin/"..outputdir.."/%{prj.name}")
 	objdir ("bin-int/"..outputdir.."/%{prj.name}")

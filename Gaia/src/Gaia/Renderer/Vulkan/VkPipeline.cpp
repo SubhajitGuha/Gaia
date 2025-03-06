@@ -61,6 +61,7 @@ namespace Gaia {
 		pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 		pipelineCreateInfo.pNext = &m_renderInfo;
 
+        
 		pipelineCreateInfo.stageCount = m_shaderStages.size();
 		pipelineCreateInfo.pStages = m_shaderStages.data();
 		pipelineCreateInfo.pVertexInputState = &m_vertexInput;

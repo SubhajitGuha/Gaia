@@ -73,5 +73,18 @@ namespace Gaia
 
 			vkCmdBlitImage2(cmd, &imageInfo);
 		}
+
+		VkSemaphore createSemaphore(VkDevice device)
+		{
+			VkSemaphore semaphore;
+
+			VkSemaphoreCreateInfo sci{
+				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+				.pNext = nullptr,
+				.flags = 0 };
+
+			vkCreateSemaphore(device, &sci, nullptr, &semaphore);
+			return semaphore;
+		}
 	}
 }

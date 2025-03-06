@@ -1,5 +1,6 @@
 #pragma once
 #include "VkBootstrap.h";
+#include "vma/vk_mem_alloc.h"
 #include "VkBootstrapDispatch.h"
 #include "Gaia/Core.h"
 #include "VkRenderer.h"
@@ -37,6 +38,10 @@ namespace Gaia {
 		VkExtent2D m_swapchain_extenet;
 		VkExtent2D m_drawExtent;
 
+		//vulkan memory allocator
+		VmaAllocator m_allocator;
+		ref<VkRenderer> m_renderer;
+
 	public:
 		static void Init(ref<Window> window);
 		static void Destroy();
@@ -49,8 +54,9 @@ namespace Gaia {
 	private:
 		bool b_enableValidationLayers = true;
 		static ref<Vulkan> m_vulkan_context;
-		ref<VkRenderer> m_renderer;
 		float window_width, window_height;
+		VkImage depth_image;
+		VkImageView depth_image_view;
 	private:
 		void create_swapchain(uint32_t width, uint32_t height);
 		void destroy_swapchain();

@@ -1,4 +1,7 @@
 #include "pch.h"
+#define VMA_IMPLEMENTATION
+#define VMA_STATIC_VULKAN_FUNCTIONS 0
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
 #include "Vulkan.h"
 #include "gaia/Window.h"
 #include "GLFW/glfw3.h"
@@ -6,6 +9,7 @@
 #include "VkInitializers.h"
 #include "VkUtils.h"
 #include "backends/imgui_impl_vulkan.h"
+#include "Gaia/LoadMesh.h"
 
 
 namespace Gaia
@@ -92,12 +96,27 @@ namespace Gaia
 		m_vulkan_context->m_queue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
 		m_vulkan_context->m_queue_family_idx = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
 
+		//vma initilization
+		VmaVulkanFunctions vulkanFunctions = {};
+		vulkanFunctions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
+		vulkanFunctions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;
+
+		VmaAllocatorCreateInfo allocatorCreateInfo = {};
+		allocatorCreateInfo.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
+		allocatorCreateInfo.vulkanApiVersion = VK_API_VERSION_1_2;
+		allocatorCreateInfo.physicalDevice = m_vulkan_context->m_physical_device;
+		allocatorCreateInfo.device = m_vulkan_context->m_device;
+		allocatorCreateInfo.instance = m_vulkan_context->m_instance;
+		allocatorCreateInfo.pVulkanFunctions = &vulkanFunctions;
+
+		vmaCreateAllocator(&allocatorCreateInfo, &m_vulkan_context->m_allocator);
+		
 		m_vulkan_context->window_height = window->GetHeight();
 		m_vulkan_context->window_width = window->GetWidth();
 
 		m_vulkan_context->create_swapchain(window->GetWidth(), window->GetHeight());
 
-		m_vulkan_context->m_renderer = std::make_shared<VkRenderer>();
+		m_vulkan_context->m_renderer = std::make_shared<VkRenderer>(m_vulkan_context->window_width, m_vulkan_context->window_height);
 	}
 	void Vulkan::Destroy()
 	{
@@ -116,6 +135,7 @@ namespace Gaia
 		}
 		m_vulkan_context->destroy_swapchain();
 		vkDestroySurfaceKHR(m_vulkan_context->m_instance, m_vulkan_context->m_surface, nullptr);
+		vmaDestroyAllocator(m_vulkan_context->m_allocator);
 		vkDestroyDevice(m_vulkan_context->m_device, nullptr);
 		vkb::destroy_debug_utils_messenger(m_vulkan_context->m_instance, m_vulkan_context->m_debug_messenger, nullptr);
 		vkDestroyInstance(m_vulkan_context->m_instance, nullptr);
@@ -185,7 +205,15 @@ namespace Gaia
 		vkCmdBeginRendering(cmd, &renderInfo);
 		vkCmdSetViewport(cmd, 0, 1, &viewport);
 		vkCmdSetScissor(cmd, 0, 1, &scissor);
-		vkCmdDraw(cmd, 3, 1, 0, 0);
+		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_renderer->graphics_pipeline->m_pipelineLayout, 0, 1, &m_renderer->camera_desc_set, 0, nullptr);
+		for (int i = 0; i < m_renderer->mesh->m_subMeshes.size(); i++)
+		{
+			VkDeviceSize size = 0;
+			vkCmdBindVertexBuffers(cmd, 0, 1, &m_renderer->mesh->m_subMeshes[i].vk_mesh_vertex_buffer.m_buffer, &size);
+			vkCmdBindIndexBuffer(cmd, m_renderer->mesh->m_subMeshes[i].vk_mesh_index_buffer.m_buffer, size, VK_INDEX_TYPE_UINT32);
+
+			vkCmdDrawIndexed(cmd, m_renderer->mesh->m_subMeshes[i].indices.size(), 1, 0, 0,0);
+		}
 		vkCmdEndRendering(cmd);
 		render_imgui(cmd, m_swapchain_image_views[swapchainImageIndex]);
 		vkutil::transition_image(cmd, m_swapchain_images[swapchainImageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);

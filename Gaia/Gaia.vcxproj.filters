@@ -10,11 +10,17 @@
     <Filter Include="src\Gaia\Events">
       <UniqueIdentifier>{92EC6C9F-FE77-DA63-0789-5D5873933664}</UniqueIdentifier>
     </Filter>
+    <Filter Include="src\Gaia\GltfLoader">
+      <UniqueIdentifier>{615D37BC-CDBE-14CA-562C-5B7CC28C4B89}</UniqueIdentifier>
+    </Filter>
     <Filter Include="src\Gaia\ImGui">
       <UniqueIdentifier>{1858A333-0426-9739-EDB9-0760D926739E}</UniqueIdentifier>
     </Filter>
     <Filter Include="src\Gaia\Renderer">
       <UniqueIdentifier>{D4675525-407E-53BB-89F5-DEDCF54A2443}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\Gaia\Renderer\Cameras">
+      <UniqueIdentifier>{BF1FA0A2-2BE2-D32C-7492-62B9E093AC0A}</UniqueIdentifier>
     </Filter>
     <Filter Include="src\Gaia\Renderer\Vulkan">
       <UniqueIdentifier>{D4DEEE49-C003-3ECA-E94E-235AD5D23CE8}</UniqueIdentifier>
@@ -159,6 +165,15 @@
     <ClInclude Include="src\Gaia\GaiaCodes.h">
       <Filter>src\Gaia</Filter>
     </ClInclude>
+    <ClInclude Include="src\Gaia\GltfLoader\stb_image.h">
+      <Filter>src\Gaia\GltfLoader</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Gaia\GltfLoader\stb_image_write.h">
+      <Filter>src\Gaia\GltfLoader</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Gaia\GltfLoader\tiny_gltf.h">
+      <Filter>src\Gaia\GltfLoader</Filter>
+    </ClInclude>
     <ClInclude Include="src\Gaia\ImGui\ImGuiLayer.h">
       <Filter>src\Gaia\ImGui</Filter>
     </ClInclude>
@@ -171,13 +186,43 @@
     <ClInclude Include="src\Gaia\LayerStack.h">
       <Filter>src\Gaia</Filter>
     </ClInclude>
+    <ClInclude Include="src\Gaia\LoadMesh.h">
+      <Filter>src\Gaia</Filter>
+    </ClInclude>
     <ClInclude Include="src\Gaia\Log.h">
       <Filter>src\Gaia</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Gaia\Renderer\Cameras\Camera.h">
+      <Filter>src\Gaia\Renderer\Cameras</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Gaia\Renderer\Cameras\EditorCamera.h">
+      <Filter>src\Gaia\Renderer\Cameras</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Gaia\Renderer\Cameras\SceneCamera.h">
+      <Filter>src\Gaia\Renderer\Cameras</Filter>
     </ClInclude>
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkBootstrap.h">
       <Filter>src\Gaia\Renderer\Vulkan</Filter>
     </ClInclude>
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkBootstrapDispatch.h">
+      <Filter>src\Gaia\Renderer\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkBuffer.h">
+      <Filter>src\Gaia\Renderer\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkDescriptorSet.h">
+      <Filter>src\Gaia\Renderer\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkInitializers.h">
+      <Filter>src\Gaia\Renderer\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkPipeline.h">
+      <Filter>src\Gaia\Renderer\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkRenderer.h">
+      <Filter>src\Gaia\Renderer\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkUtils.h">
       <Filter>src\Gaia\Renderer\Vulkan</Filter>
     </ClInclude>
     <ClInclude Include="src\Gaia\Renderer\Vulkan\Vulkan.h">
@@ -233,9 +278,6 @@
     </ClInclude>
     <ClInclude Include="vendor\Curl\include\curl\websockets.h">
       <Filter>vendor\Curl\include\curl</Filter>
-    </ClInclude>
-    <ClInclude Include="vendor\assimp\include\assimp\AssertHandler.h">
-      <Filter>vendor\assimp\include\assimp</Filter>
     </ClInclude>
     <ClInclude Include="vendor\assimp\include\assimp\Base64.hpp">
       <Filter>vendor\assimp\include\assimp</Filter>
@@ -1071,10 +1113,9 @@
     <ClInclude Include="vendor\stb_image\stb_image_resize.h">
       <Filter>vendor\stb_image</Filter>
     </ClInclude>
-    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkInitializers.h" />
-    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkUtils.h" />
-    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkPipeline.h" />
-    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkRenderer.h" />
+    <ClInclude Include="src\Gaia\Renderer\Vulkan\VulkanClasses.h" />
+    <ClInclude Include="src\Gaia\Renderer\Pool.h" />
+    <ClInclude Include="src\Gaia\Renderer\GaiaRenderer.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Gaia\Application.cpp">
@@ -1092,10 +1133,40 @@
     <ClCompile Include="src\Gaia\LayerStack.cpp">
       <Filter>src\Gaia</Filter>
     </ClCompile>
+    <ClCompile Include="src\Gaia\LoadMesh.cpp">
+      <Filter>src\Gaia</Filter>
+    </ClCompile>
     <ClCompile Include="src\Gaia\Log.cpp">
       <Filter>src\Gaia</Filter>
     </ClCompile>
+    <ClCompile Include="src\Gaia\Renderer\Cameras\Camera.cpp">
+      <Filter>src\Gaia\Renderer\Cameras</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Gaia\Renderer\Cameras\EditorCamera.cpp">
+      <Filter>src\Gaia\Renderer\Cameras</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Gaia\Renderer\Cameras\SceneCamera.cpp">
+      <Filter>src\Gaia\Renderer\Cameras</Filter>
+    </ClCompile>
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkBootstrap.cpp">
+      <Filter>src\Gaia\Renderer\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkBuffer.cpp">
+      <Filter>src\Gaia\Renderer\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkDescriptorSet.cpp">
+      <Filter>src\Gaia\Renderer\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkInitializers.cpp">
+      <Filter>src\Gaia\Renderer\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkPipeline.cpp">
+      <Filter>src\Gaia\Renderer\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkRenderer.cpp">
+      <Filter>src\Gaia\Renderer\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkUtils.cpp">
       <Filter>src\Gaia\Renderer\Vulkan</Filter>
     </ClCompile>
     <ClCompile Include="src\Gaia\Renderer\Vulkan\Vulkan.cpp">
@@ -1122,14 +1193,6 @@
     <ClCompile Include="vendor\stb_image\stb_image_resize.cpp">
       <Filter>vendor\stb_image</Filter>
     </ClCompile>
-    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkInitializers.cpp" />
-    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkUtils.cpp" />
-    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkPipeline.cpp" />
-    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkRenderer.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="src\Gaia\Renderer\Shaders\compile.bat" />
-    <None Include="src\Gaia\Renderer\Shaders\vert_shader.vert" />
-    <None Include="src\Gaia\Renderer\Shaders\frag_shader.frag" />
+    <ClCompile Include="src\Gaia\Renderer\Vulkan\VulkanClasses.cpp" />
   </ItemGroup>
 </Project>
