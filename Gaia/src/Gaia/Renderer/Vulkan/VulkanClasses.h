@@ -9,8 +9,8 @@
 
 //I am trying to put every vulkan class Implementation in this file
 namespace Gaia {
-	
-	enum { MAX_COLOR_ATTACHMENTS = 8};
+
+	class VulkanContext;
 
 	struct VulkanImage final {
 		inline bool isSampledImage() const { return (vkUsageFlags_ & VK_IMAGE_USAGE_SAMPLED_BIT) > 0; }
@@ -28,10 +28,10 @@ namespace Gaia {
 									uint32_t baseLayer = 0,
 									uint32_t numLayers = 1,
 									const VkComponentMapping mapping = { 
-										.r = VK_COMPONENT_SWIZZLE_IDENTITY,
-										.g = VK_COMPONENT_SWIZZLE_IDENTITY,
-										.b = VK_COMPONENT_SWIZZLE_IDENTITY,
-										.a = VK_COMPONENT_SWIZZLE_IDENTITY },
+										.r = VK_COMPONENT_SWIZZLE_R,
+										.g = VK_COMPONENT_SWIZZLE_G,
+										.b = VK_COMPONENT_SWIZZLE_B,
+										.a = VK_COMPONENT_SWIZZLE_A },
 									const VkSamplerYcbcrConversionInfo* ycbcr = nullptr,
 									const char* debugName = nullptr) const;
 
@@ -76,12 +76,19 @@ namespace Gaia {
 
 	struct VulkanBuffer final
 	{
+		inline uint8_t* getMappedPtr() { return static_cast<uint8_t*>(mappedPtr_); }
+		inline bool isMapped() { return mappedPtr_ != nullptr; }
+
 		void bufferSubData(const VulkanContext& ctx, size_t offset, size_t size, const void* data);
 		void getBufferData(const VulkanContext& ctx, size_t offset, size_t size, void* data);
+		void flushMappedMemory(const VulkanContext& ctx, VkDeviceSize offset, VkDeviceSize size);
+		void invalidateMappedMemory(const VulkanContext& ctx, VkDeviceSize offset, VkDeviceSize size);
 	public:
 		VkBuffer vkBuffer_ = VK_NULL_HANDLE;
 		VmaAllocation vmaAllocation_ = VK_NULL_HANDLE;
 		VkBufferUsageFlags vkUsageFlags_ = 0;
+		VkDeviceSize bufferSize_ = 0;
+		void* mappedPtr_ = nullptr;
 		bool isCoherentMemory_ = false;
 	};
 
@@ -105,11 +112,13 @@ namespace Gaia {
 		VkShaderStageFlags shaderStageFlags_ = 0;
 	};
 
-	class VulkanPipelineBuilder
+	class VulkanPipelineBuilder final
 	{
+	public:
+
 		VulkanPipelineBuilder();
 		~VulkanPipelineBuilder() = default;
-	public:
+
 		VulkanPipelineBuilder& dynamicState(VkDynamicState state);
 		VulkanPipelineBuilder& primitiveTopology(VkPrimitiveTopology topology);
 		VulkanPipelineBuilder& rasterizationSamples(VkSampleCountFlagBits samples, float minSampleShading);
@@ -127,6 +136,7 @@ namespace Gaia {
 
 		VkResult build(VkDevice device, VkPipelineCache pipelineCache, VkPipelineLayout pipelineLayout, VkPipeline* outputPipeline, const char* debugName = nullptr);
 
+		static uint32_t numPipelineCreated_;
 	private:
 		enum{MAX_DYNAMIC_STATES = 128};
 		uint32_t numDynamicStates_ = 0;
@@ -149,7 +159,6 @@ namespace Gaia {
 		VkFormat depthAttachmentFormat_ = VK_FORMAT_UNDEFINED;
 		VkFormat stencilAttachmentFormat_ = VK_FORMAT_UNDEFINED;
 
-		static uint32_t numPipelineCreated_;
 	};
 
 	struct DeviceQueues final
@@ -225,17 +234,17 @@ namespace Gaia {
 			return vkInstance_;
 		}
 
-		VkDevice getDevice()
+		VkDevice getDevice() const
 		{
 			return vkDevice_;
 		}
 
-		VkPhysicalDevice getPhysicalDevice()
+		VkPhysicalDevice getPhysicalDevice() const
 		{
 			return vkPhysicsalDevice_;
 		}
 
-		VmaAllocator getVmaAllocator()
+		VmaAllocator getVmaAllocator() const
 		{
 			return vmaAllocator_;
 		}
@@ -272,6 +281,15 @@ namespace Gaia {
 		Pool<ShaderModule, ShaderModuleState> shaderModulePool_;
 	};
 
-
+	VkBlendOp getVkBlendOpFromBlendOp(BlendOp operation);
+	VkBlendFactor getVkBlendFactorFromBlendFactor(BlendFactor factor);
+	VkFormat getVkFormatFromFormat(Format format);
+	VkCullModeFlagBits getVkCullModeFromCullMode(CullMode mode);
+	VkFrontFace getVkFrontFaceFromWindingMode(WindingMode mode);
+	VkPrimitiveTopology getVkPrimitiveTopologyFromTopology(Topology topology);
+	VkSampleCountFlagBits getVkSampleCountFromSampleCount(uint32_t numSamples);
+	VkPolygonMode getVkPolygonModeFromPolygonMode(PolygonMode mode);
+	VkShaderModule loadShaderModule(const char* filePath,
+		VkDevice device);
 }
 

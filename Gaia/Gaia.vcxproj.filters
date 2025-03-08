@@ -1194,5 +1194,6 @@
       <Filter>vendor\stb_image</Filter>
     </ClCompile>
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VulkanClasses.cpp" />
+    <ClCompile Include="src\Gaia\Renderer\GaiaRenderer.cpp" />
   </ItemGroup>
 </Project>

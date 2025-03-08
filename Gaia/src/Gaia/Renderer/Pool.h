@@ -8,6 +8,9 @@
 
 namespace Gaia
 {
+	template<typename ObjectType>
+	class Handle;
+
 	template<typename ObjectType, typename ImplObjectType>
 	class Pool {
 
@@ -47,7 +50,7 @@ namespace Gaia
 			if (handle.isEmpty())
 				return;
 			GAIA_ASSERT(numObjects_ > 0, "");
-			let index = handle.index();
+			uint32_t index = handle.index();
 			GAIA_ASSERT(index < objects_.size(), "");
 			GAIA_ASSERT(handle.gen() == objects_[index].gen_, "");
 
@@ -64,15 +67,15 @@ namespace Gaia
 				return nullptr;
 			uint32_t index = handle.index();
 			GAIA_ASSERT(index < objects_.size(), "");
-			GAIA_ASSERT(handle.gen == objects_[index].gen_, "");
-			return objects_[index].obj_;
+			GAIA_ASSERT(handle.gen() == objects_[index].gen_, "");
+			return &objects_[index].obj_;
 		}
 
 		Handle<ObjectType> findObject(const ImplObjectType* obj)
 		{
 			if (!obj)
 			{
-				return {}
+				return {};
 			}
 
 			for (int i = 0; i < objects_.size(); i++)

@@ -482,6 +482,7 @@
     <ClCompile Include="src\Gaia\Renderer\Cameras\Camera.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Cameras\EditorCamera.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Cameras\SceneCamera.cpp" />
+    <ClCompile Include="src\Gaia\Renderer\GaiaRenderer.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkBootstrap.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkBuffer.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkDescriptorSet.cpp" />

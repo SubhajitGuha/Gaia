@@ -86,5 +86,19 @@ namespace Gaia
 			vkCreateSemaphore(device, &sci, nullptr, &semaphore);
 			return semaphore;
 		}
+		VkPipelineShaderStageCreateInfo getPipelineShaderStageCreateInfo(VkShaderStageFlagBits stage, VkShaderModule shaderModule, const char* entry_point, const VkSpecializationInfo* specializationInfo)
+		{
+			VkPipelineShaderStageCreateInfo ss_ci
+			{
+				.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+				.pNext = nullptr,
+				.flags = 0,
+				.stage = stage,
+				.module = shaderModule,
+				.pName = entry_point ? entry_point : "main",
+				.pSpecializationInfo = specializationInfo,
+			};
+			return ss_ci;
+		}
 	}
 }
