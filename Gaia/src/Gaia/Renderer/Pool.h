@@ -87,6 +87,17 @@ namespace Gaia
 			}
 		}
 
+		bool isPresent(ImplObjectType* obj)
+		{
+			for (auto& poolObj : objects_)
+			{
+				int val = memcmp(&poolObj.obj_, &obj, sizeof(poolObj.obj_));
+				if (val == 0)
+					return true;
+			}
+			return false;
+		}
+
 		void Clear()
 		{
 			objects_.clear();

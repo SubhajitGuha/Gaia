@@ -3,6 +3,7 @@
 #include "VkBootstrap.h"
 #include <vma/vk_mem_alloc.h>
 #include "Gaia/Renderer/GaiaRenderer.h"
+#include <future>
 
 #define MAX_MIP_LEVELS 16
 #define ONE_SEC_TO_NANOSEC 1000000000
@@ -151,6 +152,7 @@ namespace Gaia {
 		VkPipelineMultisampleStateCreateInfo multisampleState_;
 		VkPipelineDepthStencilStateCreateInfo depthStencilState_;
 		VkPipelineTessellationStateCreateInfo tessellationState_;
+		VkPipelineRenderingCreateInfo renderingInfo_;
 
 		uint32_t numColorAttachments_ = 0;
 		VkPipelineColorBlendAttachmentState colorBlendAttachmentState_[MAX_COLOR_ATTACHMENTS] = {};
@@ -202,23 +204,136 @@ namespace Gaia {
 		uint64_t currentFrameIndex_ = 0; // [0...+inf)
 	};
 
+	struct DeferredTask final {
+		DeferredTask(std::packaged_task<void()>&& task) : task_(std::move(task))
+		{}
+		std::packaged_task<void()> task_;
+	};
+
+	struct SubmitHandle final
+	{
+		uint32_t bufferIndex_ = 0;
+		uint32_t submitId_ = 0;
+		SubmitHandle() = default;
+		explicit SubmitHandle(uint32_t handle) : bufferIndex_(uint32_t(handle & 0xffffffff)), submitId_(uint32_t(handle >> 32)) {}
+		bool empty() const {
+			return submitId_ == 0;
+		}
+		uint64_t handle() const {
+			return ((uint64_t)submitId_ << 32) + bufferIndex_;
+		}
+	};
+	//simple command buffer setup inspired from lightweightVK
+	/*
+		We allocate 64 command buffers at once and when we nned a command buffe
+		we supply from the pool of empty command buffers. If no command buffer is
+		empty wait for atleat one cbb to be empty.
+	*/
+	class VulkanImmediateCommands final
+	{
+	public:
+		static const uint32_t maxCommandBuffers = 64;
+		VulkanImmediateCommands(VkDevice device, uint32_t queueFamilyIndex, const char* debugName = nullptr);
+		~VulkanImmediateCommands();
+		VulkanImmediateCommands(const VulkanImmediateCommands&) = delete;
+		VulkanImmediateCommands& operator=(const VulkanImmediateCommands&) = delete;
+
+		struct CommandBufferWrapper final
+		{
+			VkCommandBuffer cmdBuffer_ = VK_NULL_HANDLE;
+			VkCommandBuffer cmdBufferAllocated_ = VK_NULL_HANDLE;
+			SubmitHandle handle_ = {};
+			VkFence fence_ = VK_NULL_HANDLE;
+			VkSemaphore semaphore_ = VK_NULL_HANDLE;
+			bool isEncoding = false;
+		};
+
+		// returns the current command buffer (creates one if it does not exist)
+		const CommandBufferWrapper& acquire();
+		SubmitHandle submit(const CommandBufferWrapper& wrapper);
+		void waitSemaphore(VkSemaphore semaphore);
+		void signalSemaphore(VkSemaphore semaphore, uint32_t signalValue);
+		VkSemaphore acquireLastSubmitSemaphore();
+		VkFence getVkFence(SubmitHandle handle) const;
+		SubmitHandle getLastSubmitHandle() const;
+		SubmitHandle getNextSubmitHandle() const;
+		bool isReady(SubmitHandle handle, bool fastCheckNoVulkan = false) const;
+		void wait(SubmitHandle handle);
+		void waitAll();
+
+	private:
+		void purge();
+
+	private:
+		VkDevice device_ = VK_NULL_HANDLE;
+		VkQueue queue_ = VK_NULL_HANDLE;
+		VkCommandPool commandPool_ = VK_NULL_HANDLE;
+		uint32_t queueFamilyIndex_ = 0;
+		const char* debugName_ = "";
+		CommandBufferWrapper buffers_[maxCommandBuffers] = {};
+		SubmitHandle lastSubmitHandle_ = SubmitHandle{};
+		SubmitHandle nextSubmitHandle_ = SubmitHandle{};
+		VkSemaphoreSubmitInfo lastSubmitSemaphore_ = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO ,
+			.stageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT
+		};
+		VkSemaphoreSubmitInfo waitSemaphore_ = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO ,
+			.stageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT
+		}; //extra wait semaphore
+		VkSemaphoreSubmitInfo signalSemaphore_ = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO ,
+			.stageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT
+		};//extra signal semaphore
+		uint32_t numAvailableCommandBuffers_ = maxCommandBuffers;
+		uint32_t submitCounter_ = 1;
+	};
+
+	struct VulkanDescriptorSetLayout final
+	{
+		VkDescriptorSetLayout descSetLayout;
+		std::vector<VkDescriptorSetLayoutBinding> bindings;
+	};
+
+	struct VulkanDescriptorSet final
+	{
+	public:
+		
+		void write(DescriptorSetLayoutDesc& desc, VulkanContext& ctx_);
+		void updateSet();
+		void allocatePool();
+		VkDescriptorPool getPool() { return pool_; }
+		VkDescriptorSet getSet() { return set_; }
+
+		VkDevice device_ = VK_NULL_HANDLE;
+		VkDescriptorPool pool_ = VK_NULL_HANDLE;
+		VkDescriptorSet set_ = VK_NULL_HANDLE;
+		uint32_t maxSets_ = 5;
+		std::vector<VkWriteDescriptorSet> writes_ = {};
+		const char* debugName_ = "";
+	public:
+		VulkanDescriptorSetLayout layout_;
+
+	};
 	class VulkanContext final : public IContext
 	{
 		friend class Gaia::VulkanSwapchain;
 	public:
-		VulkanContext(void* window);
+		explicit VulkanContext(void* window);
 		~VulkanContext();
 
 		Holder<BufferHandle> createBuffer(BufferDesc& desc, const char* debugName = "") override;
 		Holder<TextureHandle> createTexture(TextureDesc& desc, const char* debugName = "") override;
 		Holder<TextureHandle> createTextureView(TextureViewDesc& desc, const char* debugName = "") override;
 		Holder<RenderPipelineHandle> createRenderPipeline(RenderPipelineDesc& desc) override;
-		Holder<ShaderModuleHandle> ctreateShaderModule(ShaderModuleDesc& desc) override;
+		Holder<ShaderModuleHandle> createShaderModule(ShaderModuleDesc& desc) override;
+		Holder<DescriptorSetLayoutHandle> createDescriptorSetLayout(std::vector<DescriptorSetLayoutDesc>& desc) override;
 
 		void destroy(BufferHandle handle) override;
 		void destroy(TextureHandle handle) override;
 		void destroy(RenderPipelineHandle handle) override;
 		void destroy(ShaderModuleHandle handle) override;
+		void destroy(DescriptorSetLayoutHandle handle) override;
 
 		//swapchain functions
 		TextureHandle getCurrentSwapChainTexture() override;
@@ -227,8 +342,10 @@ namespace Gaia {
 		uint32_t getNumSwapchainImages() const override;
 		void recreateSwapchain(int newWidth, int newHeight) override;
 
+		VulkanDescriptorSet* getDescriptorSet(DescriptorSetLayoutHandle handle);
 		uint32_t getFrameBufferMSAABitMask() const override;
 
+		void submit(const VulkanImmediateCommands::CommandBufferWrapper& wraper, TextureHandle swapchainImageHandle);
 		VkInstance getInstance()
 		{
 			return vkInstance_;
@@ -259,6 +376,7 @@ namespace Gaia {
 		VkInstance vkInstance_ = VK_NULL_HANDLE;
 		VkSurfaceKHR vkSurface_ = VK_NULL_HANDLE;
 		VkPhysicalDevice vkPhysicsalDevice_ = VK_NULL_HANDLE;
+		VkDebugUtilsMessengerEXT vkDebugUtilsMessenger_ = VK_NULL_HANDLE;
 		VkDevice vkDevice_ = VK_NULL_HANDLE;
 		VmaAllocator vmaAllocator_ = VK_NULL_HANDLE;
 		bool enableValidationLayers_ = true;
@@ -270,26 +388,62 @@ namespace Gaia {
 														  .pNext = &vkFeatures12_ };
 		VkPhysicalDeviceFeatures2 vkFeatures10_ = { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &vkFeatures11_ };
 
+		std::deque<DeferredTask> deferredTask_;
+		void waitForDeferredTasks();
+		void deferredTask(std::packaged_task<void()>&& task);
 	public:
 		DeviceQueues deviceQueues_;
 		std::unique_ptr<VulkanSwapchain> swapchain_;
+		std::unique_ptr<VulkanImmediateCommands> immediateCommands_;
 		VkSemaphore renderingSemaphore_ = VK_NULL_HANDLE;
 
 		Pool<Texture, VulkanImage> texturesPool_;
 		Pool<Buffer, VulkanBuffer> bufferPool_;
 		Pool<RenderPipeline, RenderPipelineState> renderPipelinePool_;
 		Pool<ShaderModule, ShaderModuleState> shaderModulePool_;
+		Pool<DescriptorSetLayout, VulkanDescriptorSet> descriptorSetPool_;
 	};
 
-	VkBlendOp getVkBlendOpFromBlendOp(BlendOp operation);
-	VkBlendFactor getVkBlendFactorFromBlendFactor(BlendFactor factor);
-	VkFormat getVkFormatFromFormat(Format format);
-	VkCullModeFlagBits getVkCullModeFromCullMode(CullMode mode);
-	VkFrontFace getVkFrontFaceFromWindingMode(WindingMode mode);
-	VkPrimitiveTopology getVkPrimitiveTopologyFromTopology(Topology topology);
-	VkSampleCountFlagBits getVkSampleCountFromSampleCount(uint32_t numSamples);
-	VkPolygonMode getVkPolygonModeFromPolygonMode(PolygonMode mode);
-	VkShaderModule loadShaderModule(const char* filePath,
+	inline VkBlendOp getVkBlendOpFromBlendOp(BlendOp operation);
+	inline VkBlendFactor getVkBlendFactorFromBlendFactor(BlendFactor factor);
+	inline VkFormat getVkFormatFromFormat(Format format);
+	inline VkCullModeFlagBits getVkCullModeFromCullMode(CullMode mode);
+	inline VkFrontFace getVkFrontFaceFromWindingMode(WindingMode mode);
+	inline VkPrimitiveTopology getVkPrimitiveTopologyFromTopology(Topology topology);
+	inline VkSampleCountFlagBits getVkSampleCountFromSampleCount(uint32_t numSamples);
+	inline VkPolygonMode getVkPolygonModeFromPolygonMode(PolygonMode mode);
+	inline VkShaderModule loadShaderModule(const char* filePath,
 		VkDevice device);
+	inline VkDescriptorType getVkDescTypeFromDescType(DescriptorType type);
+	inline VkShaderStageFlags getVkShaderStageFromShaderStage(ShaderStage stage)
+	{
+		switch (stage)
+		{
+		case Stage_Vert:
+			return VK_SHADER_STAGE_VERTEX_BIT;
+		case Stage_Tesc:
+			return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+		case Stage_Tese:
+			return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+		case Stage_Geo:
+			return VK_SHADER_STAGE_GEOMETRY_BIT;
+		case Stage_Frag:
+			return VK_SHADER_STAGE_FRAGMENT_BIT;
+		case Stage_Com:
+			return VK_SHADER_STAGE_COMPUTE_BIT;
+		case Stage_Mesh:
+			return VK_SHADER_STAGE_MESH_BIT_EXT;
+		case Stage_AnyHit:
+			return VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
+		case Stage_ClosestHit:
+			return VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+		case Stage_Intersection:
+			return VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
+		case Stage_Miss:
+			return VK_SHADER_STAGE_MISS_BIT_KHR;
+		case Stage_Callable:
+			return VK_SHADER_STAGE_CALLABLE_BIT_KHR;
+		}
+	}
 }
 

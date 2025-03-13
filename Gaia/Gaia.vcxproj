@@ -165,6 +165,7 @@
     <ClInclude Include="src\Gaia\Renderer\Cameras\SceneCamera.h" />
     <ClInclude Include="src\Gaia\Renderer\GaiaRenderer.h" />
     <ClInclude Include="src\Gaia\Renderer\Pool.h" />
+    <ClInclude Include="src\Gaia\Renderer\Renderer.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkBootstrap.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkBootstrapDispatch.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkBuffer.h" />
@@ -483,6 +484,7 @@
     <ClCompile Include="src\Gaia\Renderer\Cameras\EditorCamera.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Cameras\SceneCamera.cpp" />
     <ClCompile Include="src\Gaia\Renderer\GaiaRenderer.cpp" />
+    <ClCompile Include="src\Gaia\Renderer\Renderer.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkBootstrap.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkBuffer.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkDescriptorSet.cpp" />
@@ -509,6 +511,13 @@
     <ProjectReference Include="vendor\imgui\ImGui.vcxproj">
       <Project>{C0FF640D-2C14-8DBE-F595-301E616989EF}</Project>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="src\Gaia\Renderer\Shaders\compile.bat" />
+    <None Include="src\Gaia\Renderer\Shaders\frag_shader.frag" />
+    <None Include="src\Gaia\Renderer\Shaders\frag_shader.spv" />
+    <None Include="src\Gaia\Renderer\Shaders\vert_shader.spv" />
+    <None Include="src\Gaia\Renderer\Shaders\vert_shader.vert" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

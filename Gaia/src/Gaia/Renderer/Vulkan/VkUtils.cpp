@@ -81,10 +81,23 @@ namespace Gaia
 			VkSemaphoreCreateInfo sci{
 				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
 				.pNext = nullptr,
-				.flags = 0 };
+				.flags = 0,
+			};
+
 
 			vkCreateSemaphore(device, &sci, nullptr, &semaphore);
 			return semaphore;
+		}
+		VkFence createFence(VkDevice device)
+		{
+			VkFenceCreateInfo ci{
+				.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+				.pNext = nullptr,
+				.flags = 0,
+			};
+			VkFence fence = VK_NULL_HANDLE;
+			vkCreateFence(device, &ci, nullptr, &fence);
+			return fence;
 		}
 		VkPipelineShaderStageCreateInfo getPipelineShaderStageCreateInfo(VkShaderStageFlagBits stage, VkShaderModule shaderModule, const char* entry_point, const VkSpecializationInfo* specializationInfo)
 		{

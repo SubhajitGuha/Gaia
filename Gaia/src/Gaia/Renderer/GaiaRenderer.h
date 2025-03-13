@@ -56,6 +56,7 @@ namespace Gaia
 	using RenderPipelineHandle = Handle<struct RenderPipeline>;
 	using SamplerHande = Handle<struct Sampler>;
 	using ShaderModuleHandle = Handle<struct ShaderModule>;
+	using DescriptorSetLayoutHandle = Handle<struct DescriptorSetLayout>;
 
 	//forward declare IContext
 	class IContext;
@@ -65,6 +66,8 @@ namespace Gaia
 	void destroy(Gaia::IContext* ctx, Gaia::ShaderModuleHandle handle);
 	void destroy(Gaia::IContext* ctx, Gaia::BufferHandle handle);
 	void destroy(Gaia::IContext* ctx, Gaia::TextureHandle handle);
+	void destroy(Gaia::IContext* ctx, Gaia::DescriptorSetLayoutHandle handle);
+
 	//void destroy(IContext* ctx, RayTracingPipelineHandle handle);
 	//void destroy(IContext* ctx, SamplerHandle handle);
 	//void destroy(IContext* ctx, QueryPoolHandle handle);
@@ -202,6 +205,12 @@ namespace Gaia
 		Format_BGRA_UN8,
 		Format_BGRA_SRGB8,
 
+		Format_Z_UN16,
+		Format_Z_UN24,
+		Format_Z_F32,
+		Format_Z_UN24_S_UI8,
+		Format_Z_F32_S_UI8,
+
 		Format_ETC2_RGB8,
 		Format_ETC2_SRGB8,
 		Format_BC7_SRGB,
@@ -247,7 +256,7 @@ namespace Gaia
 		const char* debugName = "";
 	};
 
-	uint32_t getVertxFormatSize(Format format)
+	inline uint32_t getVertxFormatSize(Format format)
 	{
 		switch (format)
 		{
@@ -289,7 +298,7 @@ namespace Gaia
 
 		uint32_t getNumAttributes() const
 		{
-			uint32_t n;
+			uint32_t n = 0;
 			while (n < MAX_NUM_VERTEX_ATTRIBUTES && attributes[n].format != Format_Invalid)
 			{
 				n++;
@@ -299,7 +308,7 @@ namespace Gaia
 
 		uint32_t getNumInputBindings() const
 		{
-			uint32_t n;
+			uint32_t n = 0;
 			while (n < MAX_NUM_VERTEX_BINDINGS && inputBindings[n].stride)
 			{
 				n++;
@@ -432,6 +441,7 @@ namespace Gaia
 
 	enum ShaderStage : uint8_t
 	{
+		Stage_None,
 		Stage_Vert,
 		Stage_Tesc,
 		Stage_Tese,
@@ -457,12 +467,42 @@ namespace Gaia
 		size_t dataSize = 0; // if "dataSize" is non-zero, interpret "data" as binary shader data
 		const char* debugName = "";
 
-		ShaderModuleDesc(const char* source, ShaderStage stage, const char* debugName = ""): data(source), shaderStage(stage), debugName(debugName){}
+		//ShaderModuleDesc(const char* source, ShaderStage stage, const char* debugName = ""): data(source), shaderStage(stage), debugName(debugName){}
 		ShaderModuleDesc(const void* data, size_t dataLength, ShaderStage stage, const char* debugName = "") : data(static_cast<const char*>(data)), shaderStage(stage), debugName(debugName), dataSize(dataLength) {
 		}
-
+		ShaderModuleDesc(const char* path, ShaderStage stage, const char* debugName = nullptr)
+			:shaderPath_SPIRV(path), shaderStage(stage), debugName(debugName)
+		{ }
 	};
 
+	enum DescriptorType : uint8_t {
+		DescriptorType_None,
+		DescriptorType_Sampler,
+		DescriptorType_CombinedImageSampler,
+		DescriptorType_SampledImage,
+		DescriptorType_StorageImage,
+		DescriptorType_UniformTexelBuffer,
+		DescriptorType_StorageTexelBuffer,
+		DescriptorType_UniformBuffer,
+		DescriptorType_StorageBuffer,
+		DescriptorType_UniformBufferDynamic,
+		DescriptorType_StorageBufferDynamic,
+		DescriptorType_InputAttachment,
+		DescriptorType_InlineUniformBlock,
+	};
+
+	struct DescriptorSetLayoutDesc final
+	{
+		uint32_t binding = 0;
+		uint32_t descriptorCount = 1;
+		DescriptorType descriptorType = DescriptorType_None;
+		ShaderStage shaderStage = Stage_None;
+
+		//Resources in Descriptor Set
+		TextureHandle texture;
+		BufferHandle buffer;
+		//TODO include other resource types
+	};
 
 	class IContext
 	{
@@ -476,12 +516,14 @@ namespace Gaia
 		virtual Holder<TextureHandle> createTexture(TextureDesc& desc, const char* debugName = "") = 0;
 		virtual Holder<TextureHandle> createTextureView(TextureViewDesc& desc, const char* debugName = "") = 0;
 		virtual Holder<RenderPipelineHandle> createRenderPipeline(RenderPipelineDesc& desc) = 0;
-		virtual Holder<ShaderModuleHandle> ctreateShaderModule(ShaderModuleDesc& desc) = 0;
+		virtual Holder<ShaderModuleHandle> createShaderModule(ShaderModuleDesc& desc) = 0;
+		virtual Holder<DescriptorSetLayoutHandle> createDescriptorSetLayout(std::vector<DescriptorSetLayoutDesc>& desc) = 0;
 
 		virtual void destroy(BufferHandle handle) = 0;
 		virtual void destroy(TextureHandle handle) = 0;
 		virtual void destroy(RenderPipelineHandle handle) = 0;
 		virtual void destroy(ShaderModuleHandle handle) = 0;
+		virtual void destroy(DescriptorSetLayoutHandle handle) = 0;
 
 		//swapchain functions
 		virtual TextureHandle getCurrentSwapChainTexture() = 0;
@@ -492,6 +534,4 @@ namespace Gaia
 
 		virtual uint32_t getFrameBufferMSAABitMask() const = 0;
 	};
-
-	
 }

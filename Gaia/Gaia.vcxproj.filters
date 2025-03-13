@@ -1116,6 +1116,7 @@
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VulkanClasses.h" />
     <ClInclude Include="src\Gaia\Renderer\Pool.h" />
     <ClInclude Include="src\Gaia\Renderer\GaiaRenderer.h" />
+    <ClInclude Include="src\Gaia\Renderer\Renderer.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Gaia\Application.cpp">
@@ -1195,5 +1196,13 @@
     </ClCompile>
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VulkanClasses.cpp" />
     <ClCompile Include="src\Gaia\Renderer\GaiaRenderer.cpp" />
+    <ClCompile Include="src\Gaia\Renderer\Renderer.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="src\Gaia\Renderer\Shaders\vert_shader.vert" />
+    <None Include="src\Gaia\Renderer\Shaders\compile.bat" />
+    <None Include="src\Gaia\Renderer\Shaders\frag_shader.frag" />
+    <None Include="src\Gaia\Renderer\Shaders\frag_shader.spv" />
+    <None Include="src\Gaia\Renderer\Shaders\vert_shader.spv" />
   </ItemGroup>
 </Project>

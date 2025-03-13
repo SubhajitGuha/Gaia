@@ -5,6 +5,7 @@
 #include "GaiaCodes.h"
 #include "Renderer/Vulkan/Vulkan.h"
 #include"Layer.h"
+#include "Gaia/Renderer/Renderer.h"
 
 #define HZ_BIND_FN(x) std::bind(&Application::x,this,std::placeholders::_1)
 /*
@@ -22,18 +23,20 @@ namespace Gaia {
 		getApplication = this;
 		m_window = ref<Window>(Window::Create({ "Gaia", 1920, 1200 }));
 		m_window->SetCallbackEvent(HZ_BIND_FN(OnEvent));
-		//m_window->SetVsync(true);
-		Vulkan::Init(m_window);//initilize the scene , enable blending,get gpu info,set culling dist
-		Vulkan::InitFrameCommandBuffers(); //needed for rendering
 
-		m_ImGuiLayer = new ImGuiLayer();
-		PushOverlay(m_ImGuiLayer);
+		renderer = Renderer::create(m_window->GetNativeWindow());
+		//m_window->SetVsync(true);
+		//Vulkan::Init(m_window);//initilize the scene , enable blending,get gpu info,set culling dist
+		//Vulkan::InitFrameCommandBuffers(); //needed for rendering
+
+		/*m_ImGuiLayer = new ImGuiLayer();
+		PushOverlay(m_ImGuiLayer);*/
 	}
 
 	Application::~Application()
 	{
-		m_ImGuiLayer->OnDetach();
-		Vulkan::Destroy();
+		/*m_ImGuiLayer->OnDetach();
+		Vulkan::Destroy();*/
 	}
 
 	void Application::OnEvent(Event& e)
@@ -53,7 +56,7 @@ namespace Gaia {
 		}
 
 		//TODO remove this
-		Vulkan::GetVulkanContext()->m_renderer->OnEvent(e); //should be done on the client side
+		//Vulkan::GetVulkanContext()->m_renderer->OnEvent(e); //should be done on the client side
 	}
 
 	void Application::PushLayer(Layer* layer)
@@ -90,15 +93,16 @@ namespace Gaia {
 				layer->OnUpdate(deltaTime);
 
 			//TODO remove this
-			Vulkan::GetVulkanContext()->m_renderer->OnUpdate(deltaTime);
+			//Vulkan::GetVulkanContext()->m_renderer->OnUpdate(deltaTime);
 			
 			//for ImguiLayers
-			m_ImGuiLayer->Begin();
-			for (Layer* layer : m_layerstack)
-				layer->OnImGuiRender();
-			m_ImGuiLayer->End();
+			//m_ImGuiLayer->Begin();
+			/*for (Layer* layer : m_layerstack)
+				layer->OnImGuiRender();*/
+			//m_ImGuiLayer->End();
 
-			Vulkan::GetVulkanContext()->Render();
+			//Vulkan::GetVulkanContext()->Render();
+			renderer->render();
 
 		}
 		//m_ImGuiLayer->OnDetach();

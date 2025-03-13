@@ -7,6 +7,7 @@
 #include "VkUtils.h"
 
 namespace Gaia {
+	uint32_t VulkanPipelineBuilder::numPipelineCreated_ = 0;
 	VkImageView VulkanImage::createimageView(VkDevice device, VkImageViewType type, VkFormat format, VkImageAspectFlags aspectMask, uint32_t baseLevel, uint32_t numLevels, uint32_t baseLayer, uint32_t numLayers, const VkComponentMapping mapping, const VkSamplerYcbcrConversionInfo* ycbcr, const char* debugName) const
 	{
 		VkImageViewCreateInfo iv_ci
@@ -34,6 +35,30 @@ namespace Gaia {
 	}
 	void VulkanImage::transitionLayout(VkCommandBuffer commandBuffer, VkImageLayout newImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, const VkImageSubresourceRange& subresourceRange) const
 	{
+		VkImageMemoryBarrier2 imageBarrier
+		{
+			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+			.pNext = nullptr,
+			.srcStageMask = srcStageMask,
+			.srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+			.dstStageMask = dstStageMask,
+			.dstAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT | VK_ACCESS_2_MEMORY_READ_BIT,
+
+			.oldLayout = vkImageLayout_,
+			.newLayout = newImageLayout,
+
+			.image = vkImage_,
+			.subresourceRange = subresourceRange,
+		};
+		VkDependencyInfo depInfo{
+			.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+			.pNext = nullptr,
+			.dependencyFlags = 0,
+			.imageMemoryBarrierCount = 1,
+			.pImageMemoryBarriers = &imageBarrier,
+		};
+		vkCmdPipelineBarrier2(commandBuffer, &depInfo );
+		vkImageLayout_ = newImageLayout;
 	}
 	VkImageAspectFlags VulkanImage::getImageAspectFlags() const
 	{
@@ -79,6 +104,7 @@ namespace Gaia {
 		vkb::Result instance_res = builder.set_app_name("Gaia").
 			enable_validation_layers(enableValidationLayers_).
 			require_api_version(1, 3, 0).
+			enable_validation_layers(enableValidationLayers_).
 			use_default_debug_messenger().
 			build();
 
@@ -87,6 +113,7 @@ namespace Gaia {
 
 		vkb::Instance vkb_instance = instance_res.value();
 		vkInstance_ = vkb_instance.instance;
+		vkDebugUtilsMessenger_ = vkb_instance.debug_messenger;
 
 		//Create Surface
 		GLFWwindow* glfwWindow = (GLFWwindow*)window;
@@ -168,9 +195,30 @@ namespace Gaia {
 		int width, height;
 		glfwGetWindowSize(glfwWindow, &width, &height);
 		swapchain_ = std::make_unique<VulkanSwapchain>(*this, width, height);
+		immediateCommands_ = std::make_unique<VulkanImmediateCommands>(vkDevice_, deviceQueues_.graphicsQueueFamilyIndex);
 	}
 	VulkanContext::~VulkanContext()
 	{
+		GAIA_ASSERT(vkDeviceWaitIdle(vkDevice_) == VK_SUCCESS, "");
+		swapchain_.reset(nullptr);
+
+		waitForDeferredTasks();
+
+		vkDestroySurfaceKHR(vkInstance_, vkSurface_, nullptr);
+		immediateCommands_.release();
+		// Clean up VMA
+		
+		vmaDestroyAllocator(vmaAllocator_);
+
+		// Device has to be destroyed prior to Instance
+		vkDestroyDevice(vkDevice_, nullptr);
+
+		/*if (vkDebugUtilsMessenger_) {
+			vkDestroyDebugUtilsMessengerEXT(vkInstance_, vkDebugUtilsMessenger_, nullptr);
+		}*/
+
+		vkDestroyInstance(vkInstance_, nullptr);
+
 	}
 	Holder<BufferHandle> VulkanContext::createBuffer(BufferDesc& desc, const char* debugName)
 	{
@@ -397,10 +445,12 @@ namespace Gaia {
 				.inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
 			};
 		}
+
 		RenderPipelineHandle renderPipelineHandle = renderPipelinePool_.Create(std::move(renderPipelineState));
+		getPipeline(renderPipelineHandle);
 		return { this, renderPipelineHandle };
 	}
-	Holder<ShaderModuleHandle> VulkanContext::ctreateShaderModule(ShaderModuleDesc& desc)
+	Holder<ShaderModuleHandle> VulkanContext::createShaderModule(ShaderModuleDesc& desc)
 	{
 		//Todo glslang to load shaders
 		ShaderModuleState shaderModuleState
@@ -412,18 +462,114 @@ namespace Gaia {
 		ShaderModuleHandle shaderModuleHandle = shaderModulePool_.Create(std::move(shaderModuleState));
 		return { this, shaderModuleHandle};
 	}
+	Holder<DescriptorSetLayoutHandle> VulkanContext::createDescriptorSetLayout(std::vector<DescriptorSetLayoutDesc>& desc)
+	{
+		VulkanDescriptorSetLayout layout{};
+
+		for (auto& descSetLayout : desc)
+		{
+			VkDescriptorSetLayoutBinding newbind{};
+			newbind.binding = descSetLayout.binding;
+			newbind.descriptorCount = descSetLayout.descriptorCount;
+			newbind.descriptorType = getVkDescTypeFromDescType(descSetLayout.descriptorType);
+			newbind.stageFlags = getVkShaderStageFromShaderStage(descSetLayout.shaderStage);
+
+			layout.bindings.push_back(newbind);
+		}
+		VkDescriptorSetLayoutCreateInfo dsl_ci
+		{
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			.pNext = nullptr,
+			.flags = 0,
+			.bindingCount = (uint32_t)layout.bindings.size(),
+			.pBindings = layout.bindings.data(),
+		};
+
+		vkCreateDescriptorSetLayout(vkDevice_, &dsl_ci, nullptr, &layout.descSetLayout);
+
+		VulkanDescriptorSet set{
+			.device_ = vkDevice_,
+			.layout_ = layout,
+		};
+		for (auto& descSetLayout : desc)
+		{
+			set.write(descSetLayout, *this);
+		}
+
+		set.allocatePool();
+		set.updateSet();
+
+		DescriptorSetLayoutHandle handle = descriptorSetPool_.Create(std::move(set));
+		return {this, handle};
+	}
 	void VulkanContext::destroy(BufferHandle handle)
 	{
+		VulkanBuffer* buffer = bufferPool_.get(handle);
+		deferredTask(std::packaged_task<void()>([vkBuffer = buffer->vkBuffer_, vma = getVmaAllocator(), vmaAllocation = buffer->vmaAllocation_]() {
+			vmaDestroyBuffer(vma, vkBuffer, vmaAllocation);
+			}));
+		bufferPool_.Destroy(handle);
 	}
 	void VulkanContext::destroy(TextureHandle handle)
 	{
+		VulkanImage* image = texturesPool_.get(handle);
+
+		if (!image)
+		{
+			return;
+		}
+		if (image->imageView_ != VK_NULL_HANDLE)
+		{
+		deferredTask(std::packaged_task<void()>([device = vkDevice_, imageView = image->imageView_]() {
+			vkDestroyImageView(device, imageView, nullptr);
+			}));
+		}
+		if (image->imageViewStorage_ != VK_NULL_HANDLE)
+		{
+			deferredTask(std::packaged_task<void()>([device = vkDevice_, imageView = image->imageViewStorage_]() {
+				vkDestroyImageView(device, imageView, nullptr);
+				}));
+		}
+
+		deferredTask(std::packaged_task<void()>([allocator = getVmaAllocator(), image = image->vkImage_, allocation = image->vmaAllocation_]() {
+			vmaDestroyImage(allocator, image, allocation);
+			}));
+		texturesPool_.Destroy(handle);
 	}
 	void VulkanContext::destroy(RenderPipelineHandle handle)
 	{
+		RenderPipelineState* rps = renderPipelinePool_.get(handle);
+		//destroy pipeline layout 
+		deferredTask(std::packaged_task<void()>([device = vkDevice_, pl = rps->pipelineLayout_]() {
+			vkDestroyPipelineLayout(device, pl, nullptr);
+			}));
+
+		deferredTask(std::packaged_task<void()>([device = vkDevice_, pipeline = rps->pipeline_]() {
+			vkDestroyPipeline(device, pipeline, nullptr);
+			}));
+		renderPipelinePool_.Destroy(handle);
 	}
 	void VulkanContext::destroy(ShaderModuleHandle handle)
 	{
+		ShaderModuleState* sms = shaderModulePool_.get(handle);
+
+		deferredTask(std::packaged_task<void()>([device = vkDevice_, shaderModule = sms->sm]() {
+			vkDestroyShaderModule(device, shaderModule, nullptr);
+			}));
+		shaderModulePool_.Destroy(handle);
 	}
+
+	void VulkanContext::destroy(DescriptorSetLayoutHandle handle)
+	{
+		VulkanDescriptorSet* ds = descriptorSetPool_.get(handle);
+
+		deferredTask(std::packaged_task<void()>([device = vkDevice_, layout = ds->layout_.descSetLayout, pool = ds->getPool()]() {
+			vkDestroyDescriptorSetLayout(device, layout, nullptr);
+			vkDestroyDescriptorPool(device, pool, nullptr);
+			}));
+		descriptorSetPool_.Destroy(handle);
+	}
+
 	TextureHandle VulkanContext::getCurrentSwapChainTexture()
 	{
 		return swapchain_->getCurrentTexture();
@@ -444,16 +590,46 @@ namespace Gaia {
 	{
 		swapchain_ = std::make_unique<VulkanSwapchain>(*this, newWidth, newHeight);
 	}
+	VulkanDescriptorSet* VulkanContext::getDescriptorSet(DescriptorSetLayoutHandle handle)
+	{
+		VulkanDescriptorSet* set =  descriptorSetPool_.get(handle);
+		return set;
+	}
 	uint32_t VulkanContext::getFrameBufferMSAABitMask() const
 	{
 		return 0;
 	}
+
+	void VulkanContext::submit(const VulkanImmediateCommands::CommandBufferWrapper& wraper, TextureHandle swapchainImageHandle)
+	{
+		VulkanImage* swapchainImage = texturesPool_.get(swapchainImageHandle);
+
+		immediateCommands_->waitSemaphore(swapchain_->acquireSemaphore_);
+		VkImageSubresourceRange subRange{
+			.aspectMask = swapchainImage->getImageAspectFlags(),
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = 0,
+			.layerCount = 1,
+		};
+		swapchainImage->transitionLayout(wraper.cmdBuffer_, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, subRange);
+		immediateCommands_->submit(wraper);
+
+		swapchain_->present(immediateCommands_->acquireLastSubmitSemaphore());
+		if (wraper.fence_ != VK_NULL_HANDLE)
+			vkWaitForFences(vkDevice_, 1, &wraper.fence_, VK_TRUE, ONE_SEC_TO_NANOSEC);
+	}
+	
 	VkPipeline VulkanContext::getPipeline(RenderPipelineHandle handle)
 	{
 		RenderPipelineState* rps = renderPipelinePool_.get(handle);
 		if (!rps)
 		{
 			return VK_NULL_HANDLE;
+		}
+		if (rps->pipeline_ != VK_NULL_HANDLE)
+		{
+			return rps->pipeline_;
 		}
 
 		std::unique_ptr<Gaia::VulkanPipelineBuilder> pipelineBuilder = std::make_unique<Gaia::VulkanPipelineBuilder>();
@@ -527,6 +703,8 @@ namespace Gaia {
 			.primitiveTopology(getVkPrimitiveTopologyFromTopology(rps->desc_.topology))
 			.rasterizationSamples(getVkSampleCountFromSampleCount(rps->desc_.samplesCount), rps->desc_.minSampleShading)
 			.vertexInputState(vis_ci)
+			.depthAttachmentFormat(getVkFormatFromFormat(rps->desc_.depthFormat))
+			
 			.colorAttachments(vkColorAttachments, colorFormats, numColAttachments);
 		//add the shader stages
 		if (smsVertex)
@@ -551,7 +729,7 @@ namespace Gaia {
 		}
 
 		//build the pipeline
-		pipelineBuilder->build(vkDevice_, VK_NULL_HANDLE, rps->pipelineLayout_, &rps->pipeline_);
+		GAIA_ASSERT(pipelineBuilder->build(vkDevice_, VK_NULL_HANDLE, rps->pipelineLayout_, &rps->pipeline_) == VK_SUCCESS, "error");
 
 		return rps->pipeline_;
 	}
@@ -560,6 +738,20 @@ namespace Gaia {
 	}
 	void VulkanContext::createSurface()
 	{
+	}
+
+	void VulkanContext::waitForDeferredTasks()
+	{
+		for (auto& task : deferredTask_)
+		{
+			GAIA_ASSERT(vkDeviceWaitIdle(vkDevice_) == VK_SUCCESS, ""); //wait for device to finish its tasks
+			task.task_();
+		}
+	}
+
+	void VulkanContext::deferredTask(std::packaged_task<void()>&& task)
+	{
+		deferredTask_.emplace_back(DeferredTask(std::move(task)));
 	}
 	void VulkanBuffer::bufferSubData(const VulkanContext& ctx, size_t offset, size_t size, const void* data)
 	{
@@ -619,6 +811,7 @@ namespace Gaia {
 
 		rasterizationState_(VkPipelineRasterizationStateCreateInfo{
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+				.lineWidth = 1.0,
 			}), 
 
 		multisampleState_(VkPipelineMultisampleStateCreateInfo
@@ -643,6 +836,10 @@ namespace Gaia {
 		tessellationState_(VkPipelineTessellationStateCreateInfo
 			{
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO,
+			}),
+		renderingInfo_(VkPipelineRenderingCreateInfo
+			{
+				.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
 			})
 	{
 	}
@@ -700,16 +897,21 @@ namespace Gaia {
 			colorAttachmentFormat_[i] = formats[i];
 			numColorAttachments_ = numColorAttachments;
 		}
+		renderingInfo_.colorAttachmentCount = numColorAttachments;
+		renderingInfo_.pColorAttachmentFormats = formats;
+
 		return *this;
 	}
 	VulkanPipelineBuilder& VulkanPipelineBuilder::depthAttachmentFormat(VkFormat format)
 	{
 		depthAttachmentFormat_ = format;
+		renderingInfo_.depthAttachmentFormat = depthAttachmentFormat_;
 		return *this;
 	}
 	VulkanPipelineBuilder& VulkanPipelineBuilder::stencilAttachmentFormat(VkFormat format)
 	{
 		stencilAttachmentFormat_ = format;
+		renderingInfo_.stencilAttachmentFormat = stencilAttachmentFormat_;
 		return *this;
 	}
 	VulkanPipelineBuilder& VulkanPipelineBuilder::patchControlPoints(uint32_t numPoints)
@@ -754,7 +956,7 @@ namespace Gaia {
 		VkGraphicsPipelineCreateInfo gp_ci
 		{
 			.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-			.pNext = nullptr,
+			.pNext = &renderingInfo_,
 			.flags = 0,
 			.stageCount = numShaderStages_,
 			.pStages = shaderStages_,
@@ -770,7 +972,6 @@ namespace Gaia {
 			.layout = pipelineLayout,
 			.renderPass = VK_NULL_HANDLE,
 			.subpass = 0,
-
 		};
 		VkResult res = vkCreateGraphicsPipelines(device, pipelineCache, 1, &gp_ci, nullptr, outputPipeline);
 
@@ -1059,6 +1260,17 @@ namespace Gaia {
 		case Format_BC7_SRGB:
 			return VK_FORMAT_BC7_SRGB_BLOCK;
 
+			//depth formats
+		case Format_Z_UN16:
+			return VK_FORMAT_D16_UNORM;
+		case Format_Z_UN24:
+			return VK_FORMAT_D24_UNORM_S8_UINT;
+		case Format_Z_F32:
+			return VK_FORMAT_D32_SFLOAT;
+		case Format_Z_UN24_S_UI8:
+			return VK_FORMAT_D24_UNORM_S8_UINT;
+		case Format_Z_F32_S_UI8:
+			return VK_FORMAT_D32_SFLOAT_S8_UINT;
 		default:
 			return VK_FORMAT_UNDEFINED;
 		}
@@ -1177,5 +1389,386 @@ namespace Gaia {
 			return VK_NULL_HANDLE;
 		}
 		return shaderModule;
+	}
+	VkDescriptorType getVkDescTypeFromDescType(DescriptorType type)
+	{
+		switch (type)
+		{
+		case DescriptorType_Sampler:
+			return VK_DESCRIPTOR_TYPE_SAMPLER;
+		case DescriptorType_CombinedImageSampler:
+			return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		case DescriptorType_SampledImage:
+			return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+		case DescriptorType_StorageImage:
+			return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+		case DescriptorType_UniformTexelBuffer:
+			return VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+		case DescriptorType_StorageTexelBuffer:
+			return VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+		case DescriptorType_UniformBuffer:
+			return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		case DescriptorType_StorageBuffer:
+			return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		case DescriptorType_UniformBufferDynamic:
+			return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+		case DescriptorType_StorageBufferDynamic:
+			return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+		case DescriptorType_InputAttachment:
+			return VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+		case DescriptorType_InlineUniformBlock:
+			return VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
+		}
+	}
+	VulkanImmediateCommands::VulkanImmediateCommands(VkDevice device, uint32_t queueFamilyIndex, const char* debugName)
+		: device_(device), queueFamilyIndex_(queueFamilyIndex), debugName_(debugName)
+	{
+		vkGetDeviceQueue(device, queueFamilyIndex, 0, &queue_);
+		
+		//create a command buffer pool
+		VkCommandPoolCreateInfo cp_ci{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+			.pNext = nullptr,
+			.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT|VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+			.queueFamilyIndex = queueFamilyIndex_,
+		};
+		vkCreateCommandPool(device, &cp_ci, nullptr, &commandPool_);
+
+		//allocate command buffers
+		VkCommandBufferAllocateInfo ai =
+		{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.pNext = nullptr,
+			.commandPool = commandPool_,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = 1,
+		};
+
+		for (int i = 0; i < maxCommandBuffers; i++)
+		{
+			CommandBufferWrapper& wrapper = buffers_[i];
+			wrapper.semaphore_ = vkutil::createSemaphore(device);
+			wrapper.fence_ = vkutil::createFence(device);
+
+			GAIA_ASSERT(vkAllocateCommandBuffers(device, &ai, &wrapper.cmdBufferAllocated_) == VK_SUCCESS, "");
+			wrapper.handle_.bufferIndex_ = i;
+			wrapper.isEncoding = false;
+		}
+	}
+	VulkanImmediateCommands::~VulkanImmediateCommands()
+	{
+		waitAll();
+		for (auto& buf : buffers_)
+		{
+			vkDestroyFence(device_, buf.fence_, nullptr);
+			vkDestroySemaphore(device_, buf.semaphore_, nullptr);
+		}
+		vkDestroyCommandPool(device_, commandPool_, nullptr);
+	}
+	const VulkanImmediateCommands::CommandBufferWrapper& VulkanImmediateCommands::acquire()
+	{
+		if (!numAvailableCommandBuffers_)
+		{
+			purge();
+		}
+
+		//wait until a command buffer is available
+		while (numAvailableCommandBuffers_ == 0)
+		{
+			GAIA_CORE_INFO("Waiting for command buffers.....");
+			purge();
+		}
+
+		VulkanImmediateCommands::CommandBufferWrapper* current = nullptr;
+
+		for (auto& buf : buffers_)
+		{
+			if (buf.cmdBuffer_ == VK_NULL_HANDLE)
+			{
+				current = &buf;
+				break;
+			}
+		}
+
+		assert(current);
+
+		GAIA_ASSERT(current->cmdBufferAllocated_ != VK_NULL_HANDLE, "");
+		current->handle_.submitId_ = submitCounter_;
+		numAvailableCommandBuffers_--;
+
+		current->cmdBuffer_ = current->cmdBufferAllocated_;
+		current->isEncoding = true;
+
+		VkCommandBufferBeginInfo bi{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+		};
+
+		vkBeginCommandBuffer(current->cmdBuffer_, &bi);
+
+		nextSubmitHandle_ = current->handle_;
+		return *current;
+	}
+	SubmitHandle VulkanImmediateCommands::submit(const VulkanImmediateCommands::CommandBufferWrapper& wrapper)
+	{
+		//if command buffer is not submitted (ie isEncoding = false) then raise error
+		GAIA_ASSERT(wrapper.isEncoding, "begin encoding the command buffer before submitting");
+		GAIA_ASSERT(vkEndCommandBuffer(wrapper.cmdBuffer_) == VK_SUCCESS, "");
+
+		VkSemaphoreSubmitInfo waitSemaphores[] = { {},{} };
+		uint32_t numWaitSemphores = 0;
+		if (waitSemaphore_.semaphore)
+		{
+			waitSemaphores[numWaitSemphores++] = waitSemaphore_;
+		}
+		if (lastSubmitSemaphore_.semaphore)
+		{
+			waitSemaphores[numWaitSemphores++] = lastSubmitSemaphore_;
+		}
+
+		VkSemaphoreSubmitInfo signalSemaphore[] = {
+			VkSemaphoreSubmitInfo{
+				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+				.semaphore = wrapper.semaphore_,
+				.stageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+			}
+		,
+			{}
+		};
+
+		uint32_t numSignalSemaphore = 1;
+
+		if (signalSemaphore_.semaphore)
+		{
+			signalSemaphore[numSignalSemaphore++] = signalSemaphore_;
+		}
+
+		VkCommandBufferSubmitInfo cb_si{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+			.pNext = nullptr,
+			.commandBuffer = wrapper.cmdBuffer_,
+		};
+
+		VkSubmitInfo2 si = {
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+			.waitSemaphoreInfoCount = numWaitSemphores,
+			.pWaitSemaphoreInfos = waitSemaphores,
+			.commandBufferInfoCount = 1,
+			.pCommandBufferInfos = &cb_si,
+			.signalSemaphoreInfoCount = numSignalSemaphore,
+			.pSignalSemaphoreInfos = signalSemaphore,
+		};
+
+		GAIA_ASSERT(vkQueueSubmit2(queue_, 1u, &si, wrapper.fence_) == VK_SUCCESS, "");
+		lastSubmitSemaphore_.semaphore = wrapper.semaphore_;
+		lastSubmitHandle_ = wrapper.handle_;
+		
+		waitSemaphore_.semaphore = VK_NULL_HANDLE;
+		signalSemaphore_.semaphore = VK_NULL_HANDLE;
+
+		//reset
+		const_cast<VulkanImmediateCommands::CommandBufferWrapper&>(wrapper).isEncoding = false;
+		submitCounter_++;
+
+		if (!submitCounter_)
+		{
+			submitCounter_++;
+		}
+		return lastSubmitHandle_;
+	}
+	void VulkanImmediateCommands::waitSemaphore(VkSemaphore semaphore)
+	{
+		GAIA_ASSERT(waitSemaphore_.semaphore == VK_NULL_HANDLE, "");
+		waitSemaphore_.semaphore = semaphore;
+	}
+	void VulkanImmediateCommands::signalSemaphore(VkSemaphore semaphore, uint32_t signalValue)
+	{
+		GAIA_ASSERT(signalSemaphore_.semaphore == VK_NULL_HANDLE, "");
+		signalSemaphore_.semaphore = semaphore;
+		signalSemaphore_.value = signalValue;
+	}
+	VkSemaphore VulkanImmediateCommands::acquireLastSubmitSemaphore()
+	{
+		return std::exchange(lastSubmitSemaphore_.semaphore, VK_NULL_HANDLE);
+	}
+	VkFence VulkanImmediateCommands::getVkFence(SubmitHandle handle) const
+	{
+		if (handle.empty())
+		{
+			return VK_NULL_HANDLE;
+		}
+		return buffers_[handle.bufferIndex_].fence_;
+	}
+	SubmitHandle VulkanImmediateCommands::getLastSubmitHandle() const
+	{
+		return lastSubmitHandle_;
+	}
+	SubmitHandle VulkanImmediateCommands::getNextSubmitHandle() const
+	{
+		return nextSubmitHandle_;
+	}
+	bool VulkanImmediateCommands::isReady(SubmitHandle handle, bool fastCheckNoVulkan) const
+	{
+		if (handle.empty())
+		{
+			return true;
+		}
+
+		const VulkanImmediateCommands::CommandBufferWrapper& buf = buffers_[handle.bufferIndex_];
+
+		if (buf.cmdBuffer_ == VK_NULL_HANDLE)
+		{
+			return true;
+		}
+
+		if (buf.handle_.submitId_ != handle.submitId_)
+		{
+			return true;
+		}
+
+		if (fastCheckNoVulkan)
+		{
+			return false;
+		}
+
+		return vkWaitForFences(device_, 1, &buf.fence_, VK_TRUE, 0);
+	}
+	void VulkanImmediateCommands::wait(SubmitHandle handle)
+	{
+		if (handle.empty())
+		{
+			vkDeviceWaitIdle(device_);
+			return;
+		}
+
+		if (isReady(handle))
+		{
+			return;
+		}
+		vkWaitForFences(device_, 1, &buffers_[handle.bufferIndex_].fence_, VK_TRUE, UINT64_MAX);
+		purge();
+	}
+	void VulkanImmediateCommands::waitAll()
+	{
+		VkFence fences[maxCommandBuffers];
+
+		int i = 0;
+		for (auto& buf : buffers_)
+		{
+			if (buf.cmdBuffer_ != VK_NULL_HANDLE && !buf.isEncoding)
+			{
+				fences[i++] = buf.fence_;
+			}
+		}
+
+		VkResult res = vkWaitForFences(device_, i, fences, VK_TRUE, 100000);
+		GAIA_ASSERT(res == VK_SUCCESS, "error {}", res);
+		purge();
+	}
+	void VulkanImmediateCommands::purge()
+	{
+		for (int i = 0; i < maxCommandBuffers; i++)
+		{
+			VulkanImmediateCommands::CommandBufferWrapper& buf = buffers_[(i + lastSubmitHandle_.bufferIndex_ + 1) % maxCommandBuffers];
+
+			//if the bommand buffer is in encoding state or if it is empty skip it
+			if (buf.cmdBuffer_ == VK_NULL_HANDLE || buf.isEncoding)
+			{
+				continue;
+			}
+
+			VkResult res = vkWaitForFences(device_, 1, &buf.fence_, VK_TRUE, 0);
+			if (res == VK_SUCCESS)
+			{
+				GAIA_ASSERT(vkResetCommandBuffer(buf.cmdBuffer_, 0) == VK_SUCCESS,"");
+				GAIA_ASSERT(vkResetFences(device_, 1, &buf.fence_) == VK_SUCCESS, "");
+				buf.cmdBuffer_ = VK_NULL_HANDLE;
+				numAvailableCommandBuffers_++;
+			}
+			else {
+				if (res != VK_TIMEOUT)
+				{
+					GAIA_ASSERT(res == VK_SUCCESS, "");
+				}
+			}
+		}
+	}
+	/*VulkanDescriptorSet::VulkanDescriptorSet(VkDevice device,VulkanContext& ctx, VulkanDescriptorSetLayout layout, const char* debugName)
+		: device_(device), ctx_(ctx), debugName_(debugName), layout_(layout)
+	{
+
+	}
+	VulkanDescriptorSet::~VulkanDescriptorSet()
+	{
+	}*/
+	void VulkanDescriptorSet::write(DescriptorSetLayoutDesc& desc, VulkanContext& ctx_)
+	{
+		VkDescriptorImageInfo imageInfo{};
+		if (!desc.texture.isEmpty())
+		{
+			VulkanImage* image = ctx_.texturesPool_.get(desc.texture);
+			imageInfo.imageLayout = image->vkImageLayout_;
+			imageInfo.imageView = image->imageView_;
+			//imageInfo.sampler = {};
+		}
+
+		VkDescriptorBufferInfo bufInfo{};
+		if (!desc.buffer.isEmpty())
+		{
+			VulkanBuffer* buffer = ctx_.bufferPool_.get(desc.buffer);
+			bufInfo.buffer = buffer->vkBuffer_;
+			bufInfo.offset = 0;
+			bufInfo.range = buffer->bufferSize_;
+		}
+
+		VkWriteDescriptorSet write{};
+
+		write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		write.descriptorCount = desc.descriptorCount;
+		write.write = set_;
+		write.pImageInfo = !desc.texture.isEmpty() ? &imageInfo : nullptr;
+		write.dstBinding = desc.binding;
+		write.descriptorType = getVkDescTypeFromDescType(desc.descriptorType);
+		write.pBufferInfo = !desc.buffer.isEmpty() ? &bufInfo : nullptr;
+
+		writes_.push_back(write);
+	}
+	void VulkanDescriptorSet::updateSet()
+	{
+		vkUpdateDescriptorSets(device_, writes_.size(), writes_.data(), 0, nullptr);
+	}
+	void VulkanDescriptorSet::allocatePool()
+	{
+		//create pool
+		std::vector<VkDescriptorPoolSize> poolSizes;
+		for (auto& write : writes_)
+		{
+			VkDescriptorPoolSize poolSize{};
+			poolSize.descriptorCount = uint32_t(write.descriptorCount * maxSets_);
+			poolSize.type = write.descriptorType;
+			poolSizes.push_back(poolSize);
+		}
+
+		VkDescriptorPoolCreateInfo ci{
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+			.pNext = nullptr, 
+			.flags = 0,
+			.maxSets = maxSets_,
+			.poolSizeCount = (uint32_t)poolSizes.size(),
+			.pPoolSizes = poolSizes.data(),
+		};
+		GAIA_ASSERT(vkCreateDescriptorPool(device_, &ci, nullptr, &pool_) == VK_SUCCESS,"");
+
+		//allocate the descriptor set
+
+		VkDescriptorSetAllocateInfo ds_ai
+		{
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+			.pNext = nullptr,
+			.descriptorPool = pool_,
+			.descriptorSetCount = 1,
+			.pSetLayouts = &layout_.descSetLayout,
+		};
+		GAIA_ASSERT(vkAllocateDescriptorSets(device_, &ds_ai, &set_)==VK_SUCCESS,"");
 	}
 }
