@@ -192,9 +192,8 @@ namespace Gaia {
 		vmaCreateAllocator(&allocatorCreateInfo, &vmaAllocator_);
 
 		//to do swapchain
-		int width, height;
-		glfwGetWindowSize(glfwWindow, &width, &height);
-		swapchain_ = std::make_unique<VulkanSwapchain>(*this, width, height);
+		glfwGetWindowSize(glfwWindow, &window_width, &window_height);
+		swapchain_ = std::make_unique<VulkanSwapchain>(*this, window_width, window_height);
 		immediateCommands_ = std::make_unique<VulkanImmediateCommands>(vkDevice_, deviceQueues_.graphicsQueueFamilyIndex);
 	}
 	VulkanContext::~VulkanContext()
@@ -219,6 +218,44 @@ namespace Gaia {
 
 		vkDestroyInstance(vkInstance_, nullptr);
 
+	}
+	ICommandBuffer& VulkanContext::acquireCommandBuffer()
+	{
+		vulkanCommandBuffer_ = std::make_unique<VulkanCommandBuffer>(this);
+		return *vulkanCommandBuffer_;
+	}
+	void VulkanContext::submit(ICommandBuffer& cmd, TextureHandle presentTexture)
+	{
+		VulkanCommandBuffer* vulkanCmdBuffer = static_cast<VulkanCommandBuffer*>(&cmd);
+
+		VulkanImage* swapchainImage = texturesPool_.get(presentTexture);
+
+		immediateCommands_->waitSemaphore(swapchain_->acquireSemaphore_);
+		VkImageSubresourceRange subRange{
+			.aspectMask = swapchainImage->getImageAspectFlags(),
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = 0,
+			.layerCount = 1,
+		};
+		swapchainImage->transitionLayout(vulkanCmdBuffer->commandBufferWraper_->cmdBuffer_, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, subRange);
+		immediateCommands_->submit(*vulkanCmdBuffer->commandBufferWraper_);
+
+		swapchain_->present(immediateCommands_->acquireLastSubmitSemaphore());
+		if (vulkanCmdBuffer->commandBufferWraper_->fence_ != VK_NULL_HANDLE)
+			vkWaitForFences(vkDevice_, 1, &vulkanCmdBuffer->commandBufferWraper_->fence_, VK_TRUE, ONE_SEC_TO_NANOSEC);
+	}
+	void VulkanContext::submit(ICommandBuffer& cmd)
+	{
+		VulkanCommandBuffer* vulkanCmdBuffer = static_cast<VulkanCommandBuffer*>(&cmd);
+
+		immediateCommands_->submit(*vulkanCmdBuffer->commandBufferWraper_);
+		if (vulkanCmdBuffer->commandBufferWraper_->fence_ != VK_NULL_HANDLE)
+			vkWaitForFences(vkDevice_, 1, &vulkanCmdBuffer->commandBufferWraper_->fence_, VK_TRUE, ONE_SEC_TO_NANOSEC);
+	}
+	std::pair<uint32_t, uint32_t> VulkanContext::getWindowSize()
+	{
+		return std::pair<uint32_t, uint32_t>(window_width, window_height);
 	}
 	Holder<BufferHandle> VulkanContext::createBuffer(BufferDesc& desc, const char* debugName)
 	{
@@ -289,7 +326,8 @@ namespace Gaia {
 			vma_ci.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 			vma_ci.preferredFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
 		}
-		vmaCreateBuffer(getVmaAllocator(), &buffer_ci, &vma_ci, &buffer.vkBuffer_, &buffer.vmaAllocation_, VK_NULL_HANDLE);
+		auto res = vmaCreateBuffer(getVmaAllocator(), &buffer_ci, &vma_ci, &buffer.vkBuffer_, &buffer.vmaAllocation_, VK_NULL_HANDLE);
+		GAIA_ASSERT(res == VK_SUCCESS, "error code: {}", res);
 
 		//get the mapped address location if the storage type is HostVisible
 		if (desc.storage_type == StorageType_HostVisible)
@@ -398,7 +436,7 @@ namespace Gaia {
 			vmaMapMemory(getVmaAllocator(), image.vmaAllocation_, &image.mappedPtr_);
 		}
 
-		image.createimageView(vkDevice_, vkImageViewType, imageFormat, image.getImageAspectFlags(), 0, desc.numMipLevels, 0, numLayers);
+		image.imageView_ = image.createimageView(vkDevice_, vkImageViewType, imageFormat, image.getImageAspectFlags(), 0, desc.numMipLevels, 0, numLayers);
 
 		TextureHandle texHandle = texturesPool_.Create(std::move(image));
 
@@ -600,25 +638,7 @@ namespace Gaia {
 		return 0;
 	}
 
-	void VulkanContext::submit(const VulkanImmediateCommands::CommandBufferWrapper& wraper, TextureHandle swapchainImageHandle)
-	{
-		VulkanImage* swapchainImage = texturesPool_.get(swapchainImageHandle);
-
-		immediateCommands_->waitSemaphore(swapchain_->acquireSemaphore_);
-		VkImageSubresourceRange subRange{
-			.aspectMask = swapchainImage->getImageAspectFlags(),
-			.baseMipLevel = 0,
-			.levelCount = 1,
-			.baseArrayLayer = 0,
-			.layerCount = 1,
-		};
-		swapchainImage->transitionLayout(wraper.cmdBuffer_, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, subRange);
-		immediateCommands_->submit(wraper);
-
-		swapchain_->present(immediateCommands_->acquireLastSubmitSemaphore());
-		if (wraper.fence_ != VK_NULL_HANDLE)
-			vkWaitForFences(vkDevice_, 1, &wraper.fence_, VK_TRUE, ONE_SEC_TO_NANOSEC);
-	}
+	
 	
 	VkPipeline VulkanContext::getPipeline(RenderPipelineHandle handle)
 	{
@@ -688,9 +708,20 @@ namespace Gaia {
 			colorFormats[i] = getVkFormatFromFormat(colorAttachment.format);
 		}
 		//createing a simple pipeline layout without any push constant or Descriptor sets
+		std::vector<VkDescriptorSetLayout> descSetLayouts;
+		uint32_t numLayouts = rps->desc_.getNumDescriptorSetLayouts();
+		for (int i = 0; i < numLayouts; i++)
+		{
+			VulkanDescriptorSet* descSet = descriptorSetPool_.get(rps->desc_.descriptorSetLayout[i]);
+			if(descSet)
+				descSetLayouts.push_back(descSet->layout_.descSetLayout);
+		}
+
 		VkPipelineLayoutCreateInfo pl_ci
 		{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+			.setLayoutCount = (uint32_t)descSetLayouts.size(),
+			.pSetLayouts = descSetLayouts.data(),
 		};
 		vkCreatePipelineLayout(vkDevice_, &pl_ci, nullptr, &rps->pipelineLayout_);
 
@@ -904,8 +935,13 @@ namespace Gaia {
 	}
 	VulkanPipelineBuilder& VulkanPipelineBuilder::depthAttachmentFormat(VkFormat format)
 	{
+		depthStencilState_.depthTestEnable = VK_TRUE;
+		depthStencilState_.depthWriteEnable = VK_TRUE;
+		depthStencilState_.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+
 		depthAttachmentFormat_ = format;
 		renderingInfo_.depthAttachmentFormat = depthAttachmentFormat_;
+		
 		return *this;
 	}
 	VulkanPipelineBuilder& VulkanPipelineBuilder::stencilAttachmentFormat(VkFormat format)
@@ -1420,6 +1456,72 @@ namespace Gaia {
 			return VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
 		}
 	}
+	VkImageLayout getVkImageLayoutFromImageLayout(ImageLayout layout)
+	{
+		switch (layout) {
+		case ImageLayout_UNDEFINED:
+			return VK_IMAGE_LAYOUT_UNDEFINED;
+		case ImageLayout_GENERAL:
+			return VK_IMAGE_LAYOUT_GENERAL;
+		case ImageLayout_COLOR_ATTACHMENT_OPTIMAL:
+			return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		case ImageLayout_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+			return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		case ImageLayout_DEPTH_STENCIL_READ_ONLY_OPTIMAL:
+			return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+		case ImageLayout_SHADER_READ_ONLY_OPTIMAL:
+			return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		case ImageLayout_TRANSFER_SRC_OPTIMAL:
+			return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+		case ImageLayout_TRANSFER_DST_OPTIMAL:
+			return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+		case ImageLayout_PREINITIALIZED:
+			return VK_IMAGE_LAYOUT_PREINITIALIZED;
+		case ImageLayout_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL:
+			return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL;
+		case ImageLayout_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL:
+			return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL;
+		case ImageLayout_DEPTH_ATTACHMENT_OPTIMAL:
+			return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+		case ImageLayout_DEPTH_READ_ONLY_OPTIMAL:
+			return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL;
+		case ImageLayout_STENCIL_ATTACHMENT_OPTIMAL:
+			return VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
+		case ImageLayout_STENCIL_READ_ONLY_OPTIMAL:
+			return VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL;
+		case ImageLayout_READ_ONLY_OPTIMAL:
+			return VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL;
+		case ImageLayout_ATTACHMENT_OPTIMAL:
+			return VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+		case ImageLayout_PRESENT_SRC_KHR:
+			return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+		case ImageLayout_VIDEO_DECODE_DST_KHR:
+			return VK_IMAGE_LAYOUT_VIDEO_DECODE_DST_KHR;
+		case ImageLayout_VIDEO_DECODE_SRC_KHR:
+			return VK_IMAGE_LAYOUT_VIDEO_DECODE_SRC_KHR;
+		case ImageLayout_VIDEO_DECODE_DPB_KHR:
+			return VK_IMAGE_LAYOUT_VIDEO_DECODE_DPB_KHR;
+		case ImageLayout_SHARED_PRESENT_KHR:
+			return VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR;
+		case ImageLayout_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT:
+			return VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+		case ImageLayout_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR:
+			return VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR;
+		case ImageLayout_RENDERING_LOCAL_READ_KHR:
+			return VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR;
+		case ImageLayout_VIDEO_ENCODE_DST_KHR:
+			return VK_IMAGE_LAYOUT_VIDEO_ENCODE_DST_KHR;
+		case ImageLayout_VIDEO_ENCODE_SRC_KHR:
+			return VK_IMAGE_LAYOUT_VIDEO_ENCODE_SRC_KHR;
+		case ImageLayout_VIDEO_ENCODE_DPB_KHR:
+			return VK_IMAGE_LAYOUT_VIDEO_ENCODE_DPB_KHR;
+		case ImageLayout_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT:
+			return VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT;
+		default:
+			// Handle unknown layout or MAX_ENUM
+			return VK_IMAGE_LAYOUT_UNDEFINED;
+		}
+	}
 	VulkanImmediateCommands::VulkanImmediateCommands(VkDevice device, uint32_t queueFamilyIndex, const char* debugName)
 		: device_(device), queueFamilyIndex_(queueFamilyIndex), debugName_(debugName)
 	{
@@ -1717,7 +1819,7 @@ namespace Gaia {
 		{
 			VulkanBuffer* buffer = ctx_.bufferPool_.get(desc.buffer);
 			bufInfo.buffer = buffer->vkBuffer_;
-			bufInfo.offset = 0;
+			bufInfo.offset = uint64_t(0);
 			bufInfo.range = buffer->bufferSize_;
 		}
 
@@ -1725,16 +1827,21 @@ namespace Gaia {
 
 		write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		write.descriptorCount = desc.descriptorCount;
-		write.write = set_;
+		write.write = VK_NULL_HANDLE;
 		write.pImageInfo = !desc.texture.isEmpty() ? &imageInfo : nullptr;
 		write.dstBinding = desc.binding;
 		write.descriptorType = getVkDescTypeFromDescType(desc.descriptorType);
 		write.pBufferInfo = !desc.buffer.isEmpty() ? &bufInfo : nullptr;
-
+		
 		writes_.push_back(write);
 	}
 	void VulkanDescriptorSet::updateSet()
 	{
+		//update the write descriptor set with desc set
+		for (auto& write : writes_)
+		{
+			write.write = set_;
+		}
 		vkUpdateDescriptorSets(device_, writes_.size(), writes_.data(), 0, nullptr);
 	}
 	void VulkanDescriptorSet::allocatePool()
@@ -1770,5 +1877,188 @@ namespace Gaia {
 			.pSetLayouts = &layout_.descSetLayout,
 		};
 		GAIA_ASSERT(vkAllocateDescriptorSets(device_, &ds_ai, &set_)==VK_SUCCESS,"");
+
+		
+	}
+	VulkanCommandBuffer::VulkanCommandBuffer(VulkanContext* ctx)
+		:ctx_(ctx), commandBufferWraper_(&ctx->immediateCommands_->acquire())
+	{
+	}
+	VulkanCommandBuffer::~VulkanCommandBuffer()
+	{
+	}
+	void VulkanCommandBuffer::copyBuffer(BufferHandle bufferHandle, void* data, size_t sizeInBytes, uint32_t offset)
+	{
+		VulkanBuffer* buffer = ctx_->bufferPool_.get(bufferHandle);
+		if (buffer->isMapped())
+		{
+			buffer->bufferSubData(*ctx_,offset, sizeInBytes, data);
+		}
+	}
+	void VulkanCommandBuffer::cmdCopyBufferToBuffer(BufferHandle srcBufferHandle, BufferHandle dstBufferHandle, uint32_t offset)
+	{
+		VulkanBuffer* srcBuffer = ctx_->bufferPool_.get(srcBufferHandle);
+		VulkanBuffer* dstBuffer = ctx_->bufferPool_.get(dstBufferHandle);
+
+		VkBufferCopy bufferCopy{
+			.srcOffset = 0,
+			.dstOffset = offset,
+			.size = srcBuffer->bufferSize_,
+		};
+
+		vkCmdCopyBuffer(commandBufferWraper_->cmdBuffer_, srcBuffer->vkBuffer_, dstBuffer->vkBuffer_, 1, &bufferCopy);
+	}
+	void VulkanCommandBuffer::cmdTransitionImageLayout(TextureHandle imageHandle, ImageLayout newLayout)
+	{
+		VulkanImage* vkImage = ctx_->texturesPool_.get(imageHandle);
+		VkImageLayout vkNewLayout = getVkImageLayoutFromImageLayout(newLayout);
+		GAIA_ASSERT(vkImage != nullptr, "");
+		VkPipelineStageFlags srcMask = VK_PIPELINE_STAGE_NONE;
+		if (vkImage->isSampledImage())
+		{
+			srcMask |= VulkanImage::isDepthFormat(vkImage->vkImageFormat_) ? VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		} 
+		if (vkImage->isStorageImage())
+		{
+			srcMask |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+		}
+
+		VkImageSubresourceRange imageRange{
+			.aspectMask = vkImage->getImageAspectFlags(),
+			.baseMipLevel = 0,
+			.levelCount = vkImage->numLevels_,
+			.baseArrayLayer = 0,
+			.layerCount = vkImage->numLayers_,
+		};
+		vkImage->transitionLayout(commandBufferWraper_->cmdBuffer_, vkNewLayout, srcMask, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, imageRange);
+	}
+	void VulkanCommandBuffer::cmdBindGraphicsPipeline(RenderPipelineHandle renderPipeline)
+	{
+		VkPipeline pipeline = ctx_->getPipeline(renderPipeline);
+		vkCmdBindPipeline(commandBufferWraper_->cmdBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+	}
+
+	void VulkanCommandBuffer::cmdBeginRendering(TextureHandle colorAttachmentHandle, TextureHandle depthTextureHandle, ClearValue* clearValue)
+	{
+		VulkanImage* colorImage = ctx_->texturesPool_.get(colorAttachmentHandle);
+		VulkanImage* depthImage = ctx_->texturesPool_.get(depthTextureHandle);
+
+		//TODO give support for resolve operation for msaa textures
+		VkRenderingAttachmentInfo colorAttachmentInfo{
+			.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+			.imageView = colorImage-> imageView_,
+			.imageLayout = colorImage->vkImageLayout_,
+			.loadOp = clearValue? VK_ATTACHMENT_LOAD_OP_CLEAR: VK_ATTACHMENT_LOAD_OP_LOAD,
+			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+		};
+		if (clearValue)
+		{
+			colorAttachmentInfo.clearValue = VkClearValue
+			{
+				.color = {clearValue->colorValue[0], clearValue->colorValue[1], clearValue->colorValue[2], clearValue->colorValue[3]},
+			};
+		}
+
+		//TODO give support for resolve operation for msaa textures
+		VkRenderingAttachmentInfo depthAttachmentInfo{};
+		if (depthImage) //if depth image is there
+		{
+			depthAttachmentInfo = {
+				.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+				.imageView = depthImage->imageView_,
+				.imageLayout = depthImage->vkImageLayout_,
+				.loadOp = clearValue ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD,
+				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+				.clearValue = VkClearValue
+				{
+					.depthStencil = {clearValue->depthClearValue, clearValue->stencilClearValue},
+				}
+			};
+		}
+
+		//no stencil for now
+		VkRenderingInfo renderingInfo{
+			.sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+			.renderArea = VkRect2D{.offset = {0,0},.extent = {colorImage->vkExtent_.width, colorImage->vkExtent_.height }},
+			.layerCount = 1,
+			.colorAttachmentCount = 1, //need to change this , need to pass an array of color texture handles
+			.pColorAttachments = &colorAttachmentInfo,
+			.pDepthAttachment = depthImage? &depthAttachmentInfo: VK_NULL_HANDLE,
+		};
+		vkCmdBeginRendering(commandBufferWraper_->cmdBuffer_, &renderingInfo);
+	}
+	void VulkanCommandBuffer::cmdEndRendering()
+	{
+		vkCmdEndRendering(commandBufferWraper_->cmdBuffer_);
+	}
+	void VulkanCommandBuffer::cmdCopyBufferToImage(BufferHandle buffer, TextureHandle texture)
+	{
+	}
+	void VulkanCommandBuffer::cmdSetViewport(Viewport viewport)
+	{
+		//for now there is only one viewport
+		VkViewport vkViewport{
+			.x = viewport.x,
+			.y = viewport.y,
+			.width = viewport.width,
+			.height = viewport.height,
+			.minDepth = viewport.minDepth,
+			.maxDepth = viewport.maxDepth,
+		};
+		vkCmdSetViewport(commandBufferWraper_->cmdBuffer_, 0, 1, &vkViewport);
+	}
+	void VulkanCommandBuffer::cmdSetScissor(Scissor scissor)
+	{
+		VkRect2D vkScissor{
+			.offset = {scissor.x, scissor.y},
+			.extent = {scissor.width, scissor.height},
+		};
+		vkCmdSetScissor(commandBufferWraper_->cmdBuffer_, 0, 1, &vkScissor);
+	}
+	void VulkanCommandBuffer::cmdBindVertexBuffer(uint32_t index, BufferHandle buffer, uint64_t bufferOffset)
+	{
+		VulkanBuffer* vertBuffer = ctx_->bufferPool_.get(buffer);
+		vkCmdBindVertexBuffers(commandBufferWraper_->cmdBuffer_, 0, 1, &vertBuffer->vkBuffer_, &bufferOffset);
+	}
+	void VulkanCommandBuffer::cmdBindIndexBuffer(BufferHandle indexBufferHandle, IndexFormat indexFormat, uint64_t indexBufferOffset)
+	{
+		VulkanBuffer* indxBuffer = ctx_->bufferPool_.get(indexBufferHandle);
+		VkIndexType type = VK_INDEX_TYPE_MAX_ENUM;
+		switch (indexFormat)
+		{
+		case IndexFormat_U8:
+			type = VK_INDEX_TYPE_UINT8_KHR;
+			break;
+		case IndexFormat_U16:
+			type = VK_INDEX_TYPE_UINT16;
+			break;
+		case IndexFormat_U32:
+			type = VK_INDEX_TYPE_UINT32;
+			break;
+		}
+		vkCmdBindIndexBuffer(commandBufferWraper_->cmdBuffer_, indxBuffer->vkBuffer_, indexBufferOffset, type);
+	}
+	void VulkanCommandBuffer::cmdPushConstants(const void* data, size_t size, size_t offset)
+	{
+	}
+	void VulkanCommandBuffer::cmdBindGraphicsDescriptorSets(uint32_t firstSet, RenderPipelineHandle pipeline, const std::vector<DescriptorSetLayoutHandle>& descriptorSetLayouts)
+	{
+		RenderPipelineState* rps = ctx_->renderPipelinePool_.get(pipeline);
+		std::vector<VkDescriptorSet> vkDescSets(descriptorSetLayouts.size());
+		for (int i = 0; i < descriptorSetLayouts.size(); i++)
+		{
+			VulkanDescriptorSet* set = ctx_->descriptorSetPool_.get(descriptorSetLayouts[i]);
+			vkDescSets[i] = set->set_;
+		}
+
+		vkCmdBindDescriptorSets(commandBufferWraper_->cmdBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, rps->pipelineLayout_, firstSet, (uint32_t)descriptorSetLayouts.size(), vkDescSets.data(), 0, nullptr);
+	}
+	void VulkanCommandBuffer::cmdDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
+	{
+		vkCmdDraw(commandBufferWraper_->cmdBuffer_, vertexCount, instanceCount, firstVertex, firstInstance);
+	}
+	void VulkanCommandBuffer::cmdDrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, uint32_t vertexOffset, uint32_t firstInstance)
+	{
+		vkCmdDrawIndexed(commandBufferWraper_->cmdBuffer_, indexCount, instanceCount, firstInstance, vertexOffset, firstInstance);
 	}
 }

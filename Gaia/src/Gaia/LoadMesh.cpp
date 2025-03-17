@@ -194,13 +194,13 @@ namespace Gaia
 				buffer[i] = (VertexAttributes(glm::vec4(m_subMeshes[k].Vertices[i], 1.0), m_subMeshes[k].TexCoord[i], transformed_normals, transformed_tangents, transformed_binormals));
 			}
 			
-			uint32_t buffer_size = buffer.size() * sizeof(VertexAttributes);
+			/*uint32_t buffer_size = buffer.size() * sizeof(VertexAttributes);
 			m_subMeshes[k].vk_mesh_vertex_buffer.CreateBuffer(Vulkan::GetVulkanContext()->m_device, Vulkan::GetVulkanContext()->m_allocator, buffer_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 			m_subMeshes[k].vk_mesh_vertex_buffer.CopyBufferCPUToGPU(Vulkan::GetVulkanContext()->m_allocator, buffer.data(), buffer_size);
 
 			uint32_t indx_buffer_size = m_subMeshes[k].indices.size() * sizeof(uint32_t);
 			m_subMeshes[k].vk_mesh_index_buffer.CreateBuffer(Vulkan::GetVulkanContext()->m_device, Vulkan::GetVulkanContext()->m_allocator, indx_buffer_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-			m_subMeshes[k].vk_mesh_index_buffer.CopyBufferCPUToGPU(Vulkan::GetVulkanContext()->m_allocator, m_subMeshes[k].indices.data(), indx_buffer_size);
+			m_subMeshes[k].vk_mesh_index_buffer.CopyBufferCPUToGPU(Vulkan::GetVulkanContext()->m_allocator, m_subMeshes[k].indices.data(), indx_buffer_size);*/
 
 		}
 
@@ -402,7 +402,7 @@ namespace Gaia
 	}
 	void LoadMesh::CreateVulkanVertexDesc()
 	{
-		m_vertexAttribDesc.resize(5);
+		/*m_vertexAttribDesc.resize(5);
 
 		m_vertexAttribDesc[0].binding = 0;
 		m_vertexAttribDesc[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
@@ -433,6 +433,6 @@ namespace Gaia
 		m_vertexBindingDesc.resize(1);
 		m_vertexBindingDesc[0].binding = 0;
 		m_vertexBindingDesc[0].stride = sizeof(VertexAttributes);
-		m_vertexBindingDesc[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+		m_vertexBindingDesc[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;*/
 	}
 }

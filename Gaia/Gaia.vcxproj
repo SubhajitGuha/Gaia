@@ -143,6 +143,7 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="src\Gaia\Scene\Scene.h" />
     <ClInclude Include="src\Gaia\Application.h" />
     <ClInclude Include="src\Gaia\Core.h" />
     <ClInclude Include="src\Gaia\EntryPoint.h" />
@@ -168,13 +169,10 @@
     <ClInclude Include="src\Gaia\Renderer\Renderer.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkBootstrap.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkBootstrapDispatch.h" />
-    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkBuffer.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkDescriptorSet.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkInitializers.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkPipeline.h" />
-    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkRenderer.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkUtils.h" />
-    <ClInclude Include="src\Gaia\Renderer\Vulkan\Vulkan.h" />
     <ClInclude Include="src\Gaia\TimeSteps.h" />
     <ClInclude Include="src\Gaia\Window.h" />
     <ClInclude Include="src\Gaia\Window\WindowsInput.h" />
@@ -473,6 +471,7 @@
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VulkanClasses.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\Gaia\Scene\Scene.cpp" />
     <ClCompile Include="src\Gaia\Application.cpp" />
     <ClCompile Include="src\Gaia\ImGui\ImGuiBuild.cpp" />
     <ClCompile Include="src\Gaia\ImGui\ImGuiLayer.cpp" />
@@ -486,13 +485,10 @@
     <ClCompile Include="src\Gaia\Renderer\GaiaRenderer.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Renderer.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkBootstrap.cpp" />
-    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkBuffer.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkDescriptorSet.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkInitializers.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkPipeline.cpp" />
-    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkRenderer.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkUtils.cpp" />
-    <ClCompile Include="src\Gaia\Renderer\Vulkan\Vulkan.cpp" />
     <ClCompile Include="src\Gaia\Window.cpp" />
     <ClCompile Include="src\Gaia\Window\WindowsInput.cpp" />
     <ClCompile Include="src\Gaia\Window\WindowsWindow.cpp" />

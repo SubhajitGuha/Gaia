@@ -1,6 +1,4 @@
 #pragma once
-#include "vulkan/vulkan.hpp"
-#include "Gaia/Renderer/Vulkan/VkBuffer.h"
 #include "Gaia/GltfLoader/tiny_gltf.h"
 #include "glm/glm.hpp"
 #include <glm/gtc/type_ptr.hpp>
@@ -31,8 +29,8 @@ namespace Gaia
 		std::vector<glm::vec2> TexCoord;
 		std::vector<uint32_t> indices;
 
-		VkBufferCreator vk_mesh_vertex_buffer;
-		VkBufferCreator vk_mesh_index_buffer;
+		/*VkBufferCreator vk_mesh_vertex_buffer;
+		VkBufferCreator vk_mesh_index_buffer;*/
 
 		//ref<VertexArray> VertexArray;
 		uint64_t m_MaterialID;
@@ -49,24 +47,6 @@ namespace Gaia
 		LoadMesh* GetLOD(int lodIndex);*/
 
 	public:
-		std::string m_path;
-		std::vector<SubMesh> m_subMeshes;
-		//Bounds total_bounds; //total mesh bounds
-		glm::mat4 GlobalTransform;
-		std::vector<VkVertexInputAttributeDescription> m_vertexAttribDesc;
-		std::vector < VkVertexInputBindingDescription> m_vertexBindingDesc;
-		//uint64_t uuid;
-	private:
-		VmaAllocation m_allocation;
-		std::string extension = ".asset";
-		std::string objectName;
-		std::vector<LoadMesh*> m_LOD;
-		/*ref<BufferLayout> bl;
-		ref<VertexBuffer> vb;
-		ref<IndexBuffer> ib;*/
-		std::vector<aiMesh*> m_Mesh;
-		tinygltf::Model model;
-		tinygltf::TinyGLTF loader;
 		struct VertexAttributes {
 			//glm::vec3 Position;
 			glm::vec4 Position;
@@ -85,6 +65,25 @@ namespace Gaia
 			VertexAttributes() = default;
 			//may more ..uv coord , tangents , normals..
 		};
+		std::string m_path;
+		std::vector<SubMesh> m_subMeshes;
+		//Bounds total_bounds; //total mesh bounds
+		glm::mat4 GlobalTransform;
+		/*std::vector<VkVertexInputAttributeDescription> m_vertexAttribDesc;
+		std::vector < VkVertexInputBindingDescription> m_vertexBindingDesc;*/
+		//uint64_t uuid;
+	private:
+		//VmaAllocation m_allocation;
+		std::string extension = ".asset";
+		std::string objectName;
+		std::vector<LoadMesh*> m_LOD;
+		/*ref<BufferLayout> bl;
+		ref<VertexBuffer> vb;
+		ref<IndexBuffer> ib;*/
+		std::vector<aiMesh*> m_Mesh;
+		tinygltf::Model model;
+		tinygltf::TinyGLTF loader;
+		
 	private:
 		void parse_scene_rec(tinygltf::Node& node);
 		void LoadObj(const std::string& Path);

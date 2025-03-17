@@ -315,12 +315,64 @@ namespace Gaia {
 		VulkanDescriptorSetLayout layout_;
 
 	};
+
+	class VulkanCommandBuffer final : public ICommandBuffer
+	{
+	public:
+		VulkanCommandBuffer() = default;
+		explicit VulkanCommandBuffer(VulkanContext* ctx);
+		~VulkanCommandBuffer() override;
+
+		void copyBuffer(BufferHandle bufferHandle, void* data, size_t sizeInBytes, uint32_t offset = 0) override;
+
+		void cmdCopyBufferToBuffer(BufferHandle srcBufferHandle, BufferHandle dstBufferHandle, uint32_t offset = 0) override;
+		void cmdTransitionImageLayout(TextureHandle image, ImageLayout newLayout) override;
+		void cmdBindGraphicsPipeline(RenderPipelineHandle renderPipeline) override;
+		void cmdBeginRendering(TextureHandle colorAttachmentHandle, TextureHandle depthTextureHandle, ClearValue* clearValue) override;
+		void cmdEndRendering() override;
+
+		void cmdCopyBufferToImage(BufferHandle buffer, TextureHandle texture) override;
+
+		void cmdSetViewport(Viewport viewport) override;
+		void cmdSetScissor(Scissor scissor) override;
+
+		void cmdBindVertexBuffer(uint32_t index, BufferHandle buffer, uint64_t bufferOffset) override;
+		void cmdBindIndexBuffer(BufferHandle indexBuffer, IndexFormat indexFormat, uint64_t indexBufferOffset) override;
+		void cmdPushConstants(const void* data, size_t size, size_t offset) override;
+
+		void cmdBindGraphicsDescriptorSets(uint32_t firstSet, RenderPipelineHandle pipeline, const std::vector<DescriptorSetLayoutHandle>& descriptorSetLayouts);
+
+		void cmdDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override;
+		void cmdDrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, uint32_t vertexOffset, uint32_t firstInstance) override;
+
+		operator VkCommandBuffer () const {
+			if (commandBufferWraper_ == nullptr)
+			{
+				return VK_NULL_HANDLE;
+			}
+			else
+			{
+				commandBufferWraper_->cmdBuffer_;
+			}
+		}
+	private:
+		friend class VulkanContext;
+		const VulkanImmediateCommands::CommandBufferWrapper* commandBufferWraper_;
+		VulkanContext* ctx_ = nullptr;
+	};
+
 	class VulkanContext final : public IContext
 	{
 		friend class Gaia::VulkanSwapchain;
 	public:
 		explicit VulkanContext(void* window);
 		~VulkanContext();
+
+		ICommandBuffer& acquireCommandBuffer() override;
+		void submit(ICommandBuffer& cmd, TextureHandle presentTexture) override;
+		void submit(ICommandBuffer& cmd) override;
+
+		std::pair<uint32_t, uint32_t> getWindowSize() override;
 
 		Holder<BufferHandle> createBuffer(BufferDesc& desc, const char* debugName = "") override;
 		Holder<TextureHandle> createTexture(TextureDesc& desc, const char* debugName = "") override;
@@ -345,7 +397,6 @@ namespace Gaia {
 		VulkanDescriptorSet* getDescriptorSet(DescriptorSetLayoutHandle handle);
 		uint32_t getFrameBufferMSAABitMask() const override;
 
-		void submit(const VulkanImmediateCommands::CommandBufferWrapper& wraper, TextureHandle swapchainImageHandle);
 		VkInstance getInstance()
 		{
 			return vkInstance_;
@@ -373,6 +424,7 @@ namespace Gaia {
 
 
 	private:
+		int window_width = 0, window_height = 0;
 		VkInstance vkInstance_ = VK_NULL_HANDLE;
 		VkSurfaceKHR vkSurface_ = VK_NULL_HANDLE;
 		VkPhysicalDevice vkPhysicsalDevice_ = VK_NULL_HANDLE;
@@ -380,6 +432,7 @@ namespace Gaia {
 		VkDevice vkDevice_ = VK_NULL_HANDLE;
 		VmaAllocator vmaAllocator_ = VK_NULL_HANDLE;
 		bool enableValidationLayers_ = true;
+		std::unique_ptr<VulkanCommandBuffer> vulkanCommandBuffer_;
 
 		VkPhysicalDeviceVulkan13Features vkFeatures13_ = { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
 		VkPhysicalDeviceVulkan12Features vkFeatures12_ = { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
@@ -415,35 +468,37 @@ namespace Gaia {
 	inline VkShaderModule loadShaderModule(const char* filePath,
 		VkDevice device);
 	inline VkDescriptorType getVkDescTypeFromDescType(DescriptorType type);
-	inline VkShaderStageFlags getVkShaderStageFromShaderStage(ShaderStage stage)
+	inline VkImageLayout getVkImageLayoutFromImageLayout(ImageLayout layout);
+	inline VkShaderStageFlags getVkShaderStageFromShaderStage(uint32_t stage)
 	{
-		switch (stage)
-		{
-		case Stage_Vert:
-			return VK_SHADER_STAGE_VERTEX_BIT;
-		case Stage_Tesc:
-			return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-		case Stage_Tese:
-			return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-		case Stage_Geo:
-			return VK_SHADER_STAGE_GEOMETRY_BIT;
-		case Stage_Frag:
-			return VK_SHADER_STAGE_FRAGMENT_BIT;
-		case Stage_Com:
-			return VK_SHADER_STAGE_COMPUTE_BIT;
-		case Stage_Mesh:
-			return VK_SHADER_STAGE_MESH_BIT_EXT;
-		case Stage_AnyHit:
-			return VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
-		case Stage_ClosestHit:
-			return VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
-		case Stage_Intersection:
-			return VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
-		case Stage_Miss:
-			return VK_SHADER_STAGE_MISS_BIT_KHR;
-		case Stage_Callable:
-			return VK_SHADER_STAGE_CALLABLE_BIT_KHR;
-		}
+		uint32_t flag = 0u;
+		
+		if(stage & Stage_Vert)
+			flag |= VK_SHADER_STAGE_VERTEX_BIT;
+		if(stage & Stage_Tesc)
+			flag |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+		if(stage& Stage_Tese)
+			flag |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+		if (stage& Stage_Geo)
+			flag |= VK_SHADER_STAGE_GEOMETRY_BIT;
+		if (stage& Stage_Frag)
+			flag |= VK_SHADER_STAGE_FRAGMENT_BIT;
+		if (stage& Stage_Com)
+			flag |= VK_SHADER_STAGE_COMPUTE_BIT;
+		if (stage& Stage_Mesh)
+			flag |= VK_SHADER_STAGE_MESH_BIT_EXT;
+		if (stage& Stage_AnyHit)
+			flag |= VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
+		if (stage& Stage_ClosestHit)
+			flag |= VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+		if (stage& Stage_Intersection)
+			flag |= VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
+		if (stage& Stage_Miss)
+			flag |= VK_SHADER_STAGE_MISS_BIT_KHR;
+		if (stage& Stage_Callable)
+			flag |= VK_SHADER_STAGE_CALLABLE_BIT_KHR;
+		
+		return flag;
 	}
 }
 

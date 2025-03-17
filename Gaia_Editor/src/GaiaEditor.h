@@ -1,8 +1,11 @@
 #pragma once
 #include "Gaia/Layer.h"
+#include "Gaia/Scene/Scene.h"
+#include "Gaia/Renderer/Renderer.h"
 using namespace Gaia;
 
 class  GaiaEditor :public Layer {
+	
 public:
 	GaiaEditor();
 	virtual void OnAttach() override;
@@ -12,5 +15,6 @@ public:
 	virtual void OnEvent(Event& e) override;
 
 private:
-	
+	ref<Renderer> renderer_;
+	ref<Scene> scene_;
 };

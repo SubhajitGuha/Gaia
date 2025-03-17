@@ -3,9 +3,8 @@
 #include "Log.h"
 #include "Window/WindowsInput.h"
 #include "GaiaCodes.h"
-#include "Renderer/Vulkan/Vulkan.h"
 #include"Layer.h"
-#include "Gaia/Renderer/Renderer.h"
+//#include "Gaia/Renderer/Renderer.h"
 
 #define HZ_BIND_FN(x) std::bind(&Application::x,this,std::placeholders::_1)
 /*
@@ -24,7 +23,7 @@ namespace Gaia {
 		m_window = ref<Window>(Window::Create({ "Gaia", 1920, 1200 }));
 		m_window->SetCallbackEvent(HZ_BIND_FN(OnEvent));
 
-		renderer = Renderer::create(m_window->GetNativeWindow());
+		//renderer = Renderer::create(m_window->GetNativeWindow());
 		//m_window->SetVsync(true);
 		//Vulkan::Init(m_window);//initilize the scene , enable blending,get gpu info,set culling dist
 		//Vulkan::InitFrameCommandBuffers(); //needed for rendering
@@ -97,12 +96,12 @@ namespace Gaia {
 			
 			//for ImguiLayers
 			//m_ImGuiLayer->Begin();
-			/*for (Layer* layer : m_layerstack)
-				layer->OnImGuiRender();*/
+			for (Layer* layer : m_layerstack)
+				layer->OnImGuiRender();
 			//m_ImGuiLayer->End();
 
 			//Vulkan::GetVulkanContext()->Render();
-			renderer->render();
+			//renderer->render();
 
 		}
 		//m_ImGuiLayer->OnDetach();

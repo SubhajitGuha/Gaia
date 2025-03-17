@@ -12,7 +12,7 @@ namespace Gaia
 
 	enum { MAX_COLOR_ATTACHMENTS = 8 };
 	enum { MAX_VERTEX_BUFFERS = 16u };
-
+	enum {MAX_DESCRIPTOR_SETS = 100u};
 	template<typename ObjectType>
 	class Handle final
 	{
@@ -147,6 +147,39 @@ namespace Gaia
 		StorageType_Device,
 		StorageType_HostVisible,
 		StorageType_Memoryless,
+	};
+
+	enum ImageLayout {
+		ImageLayout_UNDEFINED = 0,
+		ImageLayout_GENERAL = 1,
+		ImageLayout_COLOR_ATTACHMENT_OPTIMAL = 2,
+		ImageLayout_DEPTH_STENCIL_ATTACHMENT_OPTIMAL = 3,
+		ImageLayout_DEPTH_STENCIL_READ_ONLY_OPTIMAL = 4,
+		ImageLayout_SHADER_READ_ONLY_OPTIMAL = 5,
+		ImageLayout_TRANSFER_SRC_OPTIMAL = 6,
+		ImageLayout_TRANSFER_DST_OPTIMAL = 7,
+		ImageLayout_PREINITIALIZED = 8,
+		ImageLayout_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL = 1000117000,
+		ImageLayout_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL = 1000117001,
+		ImageLayout_DEPTH_ATTACHMENT_OPTIMAL = 1000241000,
+		ImageLayout_DEPTH_READ_ONLY_OPTIMAL = 1000241001,
+		ImageLayout_STENCIL_ATTACHMENT_OPTIMAL = 1000241002,
+		ImageLayout_STENCIL_READ_ONLY_OPTIMAL = 1000241003,
+		ImageLayout_READ_ONLY_OPTIMAL = 1000314000,
+		ImageLayout_ATTACHMENT_OPTIMAL = 1000314001,
+		ImageLayout_PRESENT_SRC_KHR = 1000001002,
+		ImageLayout_VIDEO_DECODE_DST_KHR = 1000024000,
+		ImageLayout_VIDEO_DECODE_SRC_KHR = 1000024001,
+		ImageLayout_VIDEO_DECODE_DPB_KHR = 1000024002,
+		ImageLayout_SHARED_PRESENT_KHR = 1000111000,
+		ImageLayout_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT = 1000218000,
+		ImageLayout_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR = 1000164003,
+		ImageLayout_RENDERING_LOCAL_READ_KHR = 1000232000,
+		ImageLayout_VIDEO_ENCODE_DST_KHR = 1000299000,
+		ImageLayout_VIDEO_ENCODE_SRC_KHR = 1000299001,
+		ImageLayout_VIDEO_ENCODE_DPB_KHR = 1000299002,
+		ImageLayout_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT = 1000339000,
+		ImageLayout_MAX_ENUM = 0x7FFFFFFF
 	};
 
 	enum Format : uint32_t
@@ -394,6 +427,13 @@ namespace Gaia
 		BlendFactor dstAlphaBlendFactor = BlendFactor_Zero;
 	};
 
+	enum PipelineBindpoint : uint8_t
+	{
+		PipelineBindpoint_Graphics = 1,
+		PipelineBindpoint_Compute = 2,
+		PipelineBindpoint_RayTracing = 3,
+	};
+
 	struct RenderPipelineDesc final
 	{
 		Topology topology = Topology_Triangle;
@@ -426,6 +466,7 @@ namespace Gaia
 		uint32_t patchControlPoints = 0;
 		float minSampleShading = 0.0f;
 
+		DescriptorSetLayoutHandle descriptorSetLayout[MAX_DESCRIPTOR_SETS];
 		const char* debugName = "";
 
 		uint32_t getNumColorAttachments() const
@@ -437,26 +478,36 @@ namespace Gaia
 			}
 			return n;
 		}
+
+		uint32_t getNumDescriptorSetLayouts()
+		{
+			uint32_t n = 0;
+			while (n < MAX_DESCRIPTOR_SETS && descriptorSetLayout[n].isValid())
+			{
+				n++;
+			}
+			return n;
+		}
 	};
 
-	enum ShaderStage : uint8_t
+	enum ShaderStage : uint32_t
 	{
-		Stage_None,
-		Stage_Vert,
-		Stage_Tesc,
-		Stage_Tese,
-		Stage_Geo,
-		Stage_Frag,
-		Stage_Com,
-		Stage_Mesh,
+		Stage_None = 0,
+		Stage_Vert = 1<<0,
+		Stage_Tesc = 1<<2,
+		Stage_Tese = 1<<3,
+		Stage_Geo = 1<<4,
+		Stage_Frag = 1<<5,
+		Stage_Com = 1<<6,
+		Stage_Mesh = 1<<7,
 
 		// ray tracing
-		Stage_RayGen,
-		Stage_AnyHit,
-		Stage_ClosestHit,
-		Stage_Miss,
-		Stage_Intersection,
-		Stage_Callable,
+		Stage_RayGen = 1 << 8,
+		Stage_AnyHit = 1 << 9,
+		Stage_ClosestHit = 1 << 10,
+		Stage_Miss = 1 << 11,
+		Stage_Intersection = 1 << 12,
+		Stage_Callable = 1 << 13,
 	};
 
 	struct ShaderModuleDesc
@@ -496,12 +547,72 @@ namespace Gaia
 		uint32_t binding = 0;
 		uint32_t descriptorCount = 1;
 		DescriptorType descriptorType = DescriptorType_None;
-		ShaderStage shaderStage = Stage_None;
+		uint32_t shaderStage = Stage_None;
 
 		//Resources in Descriptor Set
 		TextureHandle texture;
 		BufferHandle buffer;
 		//TODO include other resource types
+	};
+
+	struct Viewport {
+		float x = 0.0f;
+		float y = 0.0f;
+		float width = 1.0f;
+		float height = 1.0f;
+		float minDepth = 0.0f;
+		float maxDepth = 1.0f;
+	};
+
+	struct Scissor
+	{
+		int x = 0;
+		int y = 0;
+		uint32_t width = 0;
+		uint32_t height = 0;
+	};
+
+	enum IndexFormat : uint8_t
+	{
+		IndexFormat_U8,
+		IndexFormat_U16,
+		IndexFormat_U32,
+
+	};
+
+	struct ClearValue {
+		float colorValue[4] = { 1.0,1.0 ,1.0 ,1.0 };
+		float depthClearValue = 1.0;
+		uint32_t stencilClearValue = 1u;
+	};
+
+	class ICommandBuffer
+	{
+	public:
+		virtual ~ICommandBuffer() = default;
+
+		virtual void copyBuffer(BufferHandle bufferHandle, void* data, size_t sizeInBytes, uint32_t offset = 0) = 0;
+
+		virtual void cmdTransitionImageLayout(TextureHandle image, ImageLayout newLayout) = 0;
+		virtual void cmdBindGraphicsPipeline(RenderPipelineHandle renderPipeline) = 0;
+		virtual void cmdBeginRendering(TextureHandle colorAttachmentHandle, TextureHandle depthTextureHandle, ClearValue* clearValue) = 0;
+		virtual void cmdEndRendering() = 0;
+
+		virtual void cmdCopyBufferToBuffer(BufferHandle srcBufferHandle, BufferHandle dstBufferHandle, uint32_t offset = 0) = 0;
+		virtual void cmdCopyBufferToImage(BufferHandle buffer, TextureHandle texture) = 0;
+
+		virtual void cmdSetViewport(Viewport viewport) = 0;
+		virtual void cmdSetScissor(Scissor scissor) = 0;
+
+		virtual void cmdBindVertexBuffer(uint32_t index, BufferHandle buffer, uint64_t bufferOffset) = 0;
+		virtual void cmdBindIndexBuffer(BufferHandle indexBuffer, IndexFormat indexFormat, uint64_t indexBufferOffset) = 0;
+		virtual void cmdPushConstants(const void* data, size_t size, size_t offset) = 0;
+
+		virtual void cmdBindGraphicsDescriptorSets(uint32_t firstSet, RenderPipelineHandle pipeline,const std::vector<DescriptorSetLayoutHandle>& descriptorSetLayouts) = 0;
+
+		virtual void cmdDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) = 0;
+		virtual void cmdDrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex,uint32_t vertexOffset, uint32_t firstInstance) = 0;
+
 	};
 
 	class IContext
@@ -511,6 +622,12 @@ namespace Gaia
 
 	public:
 		virtual ~IContext() = default;
+
+		virtual ICommandBuffer& acquireCommandBuffer() = 0;
+		virtual void submit(ICommandBuffer& cmd, TextureHandle presentTexture) = 0;
+		virtual void submit(ICommandBuffer& cmd) = 0;
+
+		virtual std::pair<uint32_t, uint32_t> getWindowSize() = 0;
 
 		virtual Holder<BufferHandle> createBuffer(BufferDesc& desc, const char* debugName = "") = 0;
 		virtual Holder<TextureHandle> createTexture(TextureDesc& desc, const char* debugName = "") = 0;

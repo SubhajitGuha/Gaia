@@ -9,7 +9,7 @@
 #include "Gaia/TimeSteps.h"
 
 namespace Gaia {
-	class Renderer;
+	//class Renderer;
 	class Application { //set this class as dll export
 	public:
 		Application();
@@ -37,7 +37,7 @@ namespace Gaia {
 	private:
 		ImGuiLayer* m_ImGuiLayer;
 		ref<Window> m_window;
-		ref<Renderer> renderer;
+		//ref<Renderer> renderer;
 		bool m_Running = true;
 		bool closeWindow(WindowCloseEvent&);
 		LayerStack m_layerstack;

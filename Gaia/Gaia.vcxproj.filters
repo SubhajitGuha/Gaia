@@ -207,9 +207,6 @@
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkBootstrapDispatch.h">
       <Filter>src\Gaia\Renderer\Vulkan</Filter>
     </ClInclude>
-    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkBuffer.h">
-      <Filter>src\Gaia\Renderer\Vulkan</Filter>
-    </ClInclude>
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkDescriptorSet.h">
       <Filter>src\Gaia\Renderer\Vulkan</Filter>
     </ClInclude>
@@ -219,13 +216,7 @@
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkPipeline.h">
       <Filter>src\Gaia\Renderer\Vulkan</Filter>
     </ClInclude>
-    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkRenderer.h">
-      <Filter>src\Gaia\Renderer\Vulkan</Filter>
-    </ClInclude>
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkUtils.h">
-      <Filter>src\Gaia\Renderer\Vulkan</Filter>
-    </ClInclude>
-    <ClInclude Include="src\Gaia\Renderer\Vulkan\Vulkan.h">
       <Filter>src\Gaia\Renderer\Vulkan</Filter>
     </ClInclude>
     <ClInclude Include="src\Gaia\TimeSteps.h">
@@ -1117,6 +1108,7 @@
     <ClInclude Include="src\Gaia\Renderer\Pool.h" />
     <ClInclude Include="src\Gaia\Renderer\GaiaRenderer.h" />
     <ClInclude Include="src\Gaia\Renderer\Renderer.h" />
+    <ClInclude Include="src\Gaia\Scene\Scene.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Gaia\Application.cpp">
@@ -1152,9 +1144,6 @@
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkBootstrap.cpp">
       <Filter>src\Gaia\Renderer\Vulkan</Filter>
     </ClCompile>
-    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkBuffer.cpp">
-      <Filter>src\Gaia\Renderer\Vulkan</Filter>
-    </ClCompile>
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkDescriptorSet.cpp">
       <Filter>src\Gaia\Renderer\Vulkan</Filter>
     </ClCompile>
@@ -1164,13 +1153,7 @@
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkPipeline.cpp">
       <Filter>src\Gaia\Renderer\Vulkan</Filter>
     </ClCompile>
-    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkRenderer.cpp">
-      <Filter>src\Gaia\Renderer\Vulkan</Filter>
-    </ClCompile>
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkUtils.cpp">
-      <Filter>src\Gaia\Renderer\Vulkan</Filter>
-    </ClCompile>
-    <ClCompile Include="src\Gaia\Renderer\Vulkan\Vulkan.cpp">
       <Filter>src\Gaia\Renderer\Vulkan</Filter>
     </ClCompile>
     <ClCompile Include="src\Gaia\Window.cpp">
@@ -1197,6 +1180,7 @@
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VulkanClasses.cpp" />
     <ClCompile Include="src\Gaia\Renderer\GaiaRenderer.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Renderer.cpp" />
+    <ClCompile Include="src\Gaia\Scene\Scene.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="src\Gaia\Renderer\Shaders\vert_shader.vert" />
