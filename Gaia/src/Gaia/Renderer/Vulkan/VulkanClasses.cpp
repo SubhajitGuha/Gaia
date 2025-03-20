@@ -123,10 +123,13 @@ namespace Gaia {
 		
 
 		//select physical device
-		VkPhysicalDeviceVulkan13Features features;
-		features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-		features.synchronization2 = true;
-		features.dynamicRendering = true;
+		VkPhysicalDeviceFeatures features{};
+		features.samplerAnisotropy = VK_TRUE;
+
+		VkPhysicalDeviceVulkan13Features features13;
+		features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+		features13.synchronization2 = true;
+		features13.dynamicRendering = true;
 
 		VkPhysicalDeviceVulkan12Features features12;
 		features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
@@ -143,8 +146,9 @@ namespace Gaia {
 
 		vkb::PhysicalDeviceSelector selector{ vkb_instance };
 		vkb::Result vkb_pd_res = selector.set_minimum_version(1, 3).
-			//set_required_features_13(features).
-			//set_required_features_12(features12).
+			/*set_required_features_13(features13).
+			set_required_features_12(features12).*/
+			set_required_features(features).
 			add_required_extensions(extensions).
 			prefer_gpu_device_type(vkb::PreferredDeviceType::discrete).
 			set_surface(vkSurface_).
@@ -251,7 +255,7 @@ namespace Gaia {
 
 		immediateCommands_->submit(*vulkanCmdBuffer->commandBufferWraper_);
 		if (vulkanCmdBuffer->commandBufferWraper_->fence_ != VK_NULL_HANDLE)
-			vkWaitForFences(vkDevice_, 1, &vulkanCmdBuffer->commandBufferWraper_->fence_, VK_TRUE, ONE_SEC_TO_NANOSEC);
+			vkWaitForFences(vkDevice_, 1, &vulkanCmdBuffer->commandBufferWraper_->fence_, VK_TRUE, UINT64_MAX);
 	}
 	std::pair<uint32_t, uint32_t> VulkanContext::getWindowSize()
 	{
@@ -540,6 +544,133 @@ namespace Gaia {
 		DescriptorSetLayoutHandle handle = descriptorSetPool_.Create(std::move(set));
 		return {this, handle};
 	}
+	Holder<SamplerHandle> VulkanContext::createSampler(SamplerStateDesc& desc)
+	{
+		VulkanSampler vulkanSampler
+		{
+			.desc_ = desc,
+		};
+
+		//copy anf fill data from desc
+		VkFilter magFilter;
+		switch (desc.magFilter)
+		{
+		case SamplerFilter_Linear:
+			magFilter = VK_FILTER_LINEAR;
+			break;
+		case SamplerFilter_Nearest:
+			magFilter = VK_FILTER_NEAREST;
+		}
+
+		VkFilter minFilter;
+		switch (desc.magFilter)
+		{
+		case SamplerFilter_Linear:
+			minFilter = VK_FILTER_LINEAR;
+			break;
+		case SamplerFilter_Nearest:
+			minFilter = VK_FILTER_NEAREST;
+		}
+
+		VkSamplerMipmapMode mipmapMode;
+		switch (desc.mipMap)
+		{
+		case SamplerMip_Linear:
+			mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+			break;
+		case SamplerMip_Nearest:
+			mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+		}
+
+		VkSamplerAddressMode addressModeU;
+		switch (desc.wrapU)
+		{
+			case SamplerWrap_Clamp:
+				addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+				break;
+			case SamplerWrap_Repeat:
+				addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+				break;
+			case SamplerWrap_MirrorRepeat:
+				addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+		}
+
+		VkSamplerAddressMode addressModeV;
+		switch (desc.wrapU)
+		{
+		case SamplerWrap_Clamp:
+			addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+			break;
+		case SamplerWrap_Repeat:
+			addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+			break;
+		case SamplerWrap_MirrorRepeat:
+			addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+		}
+
+		VkSamplerAddressMode addressModeW;
+		switch (desc.wrapU)
+		{
+		case SamplerWrap_Clamp:
+			addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+			break;
+		case SamplerWrap_Repeat:
+			addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+			break;
+		case SamplerWrap_MirrorRepeat:
+			addressModeW = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+		}
+
+		VkCompareOp depthCompareOp;
+		switch (desc.depthCompareOp)
+		{
+		case CompareOp_Never:
+			depthCompareOp = VK_COMPARE_OP_NEVER;
+			break;
+		case CompareOp_AlwaysPass:
+			depthCompareOp = VK_COMPARE_OP_ALWAYS;
+			break;
+		case CompareOp_Equal:
+			depthCompareOp = VK_COMPARE_OP_EQUAL;
+			break;
+		case CompareOp_Greater:
+			depthCompareOp = VK_COMPARE_OP_GREATER;
+			break;
+		case CompareOp_GreaterEqual:
+			depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL;
+			break;
+		case CompareOp_Less:
+			depthCompareOp = VK_COMPARE_OP_LESS;
+			break;
+		case CompareOp_LessEqual:
+			depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+			break;
+		case CompareOp_NotEqual:
+			depthCompareOp = VK_COMPARE_OP_NOT_EQUAL;
+			break;
+		}
+
+		VkSamplerCreateInfo sci
+		{
+			.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+			.magFilter = magFilter,
+			.minFilter = minFilter,
+			.mipmapMode = mipmapMode,
+			.addressModeU = addressModeU,
+			.addressModeV = addressModeV,
+			.addressModeW = addressModeW,
+			.mipLodBias = 0.0,
+			.anisotropyEnable = VK_TRUE,
+			.maxAnisotropy = (float)desc.maxAnisotropic,
+			.compareEnable = desc.depthCompareEnabled,
+			.compareOp = depthCompareOp,
+			.minLod = (float)desc.mipLodMin,
+			.maxLod = (float)desc.mipLodMax,
+		};
+		vkCreateSampler(vkDevice_, &sci, nullptr, &vulkanSampler.sampler_);
+		SamplerHandle handle = samplerPool_.Create(std::move(vulkanSampler));
+		return {this, handle};
+	}
 	void VulkanContext::destroy(BufferHandle handle)
 	{
 		VulkanBuffer* buffer = bufferPool_.get(handle);
@@ -606,6 +737,16 @@ namespace Gaia {
 			vkDestroyDescriptorPool(device, pool, nullptr);
 			}));
 		descriptorSetPool_.Destroy(handle);
+	}
+
+	void VulkanContext::destroy(SamplerHandle handle)
+	{
+		VulkanSampler* sampler = samplerPool_.get(handle);
+		deferredTask(std::packaged_task<void()>([device = vkDevice_, sampler = sampler->sampler_]() {
+			vkDestroySampler(device, sampler, nullptr);
+			}));
+
+		samplerPool_.Destroy(handle);
 	}
 
 	TextureHandle VulkanContext::getCurrentSwapChainTexture()
@@ -734,9 +875,15 @@ namespace Gaia {
 			.primitiveTopology(getVkPrimitiveTopologyFromTopology(rps->desc_.topology))
 			.rasterizationSamples(getVkSampleCountFromSampleCount(rps->desc_.samplesCount), rps->desc_.minSampleShading)
 			.vertexInputState(vis_ci)
-			.depthAttachmentFormat(getVkFormatFromFormat(rps->desc_.depthFormat))
-			
 			.colorAttachments(vkColorAttachments, colorFormats, numColAttachments);
+
+		VkFormat depthFormat = getVkFormatFromFormat(rps->desc_.depthFormat);
+		if (VulkanImage::isDepthFormat(depthFormat))
+		{
+			pipelineBuilder->depthAttachmentFormat(depthFormat);
+		}
+		
+
 		//add the shader stages
 		if (smsVertex)
 		{
@@ -1024,7 +1171,7 @@ namespace Gaia {
 		surfaceFormat_ = surfaceFormat;
 		vkb::Swapchain vkbSwapchain = swapchainBuilder
 			.set_desired_format(surfaceFormat)
-			.set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
+			.set_desired_present_mode(VK_PRESENT_MODE_IMMEDIATE_KHR)
 			.set_desired_extent(width, height)
 			.add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT)
 			.build()
@@ -1661,7 +1808,8 @@ namespace Gaia {
 			.pSignalSemaphoreInfos = signalSemaphore,
 		};
 
-		GAIA_ASSERT(vkQueueSubmit2(queue_, 1u, &si, wrapper.fence_) == VK_SUCCESS, "");
+		VkResult res = vkQueueSubmit2(queue_, 1u, &si, wrapper.fence_);
+		GAIA_ASSERT(res == VK_SUCCESS, "error code: {}", res);
 		lastSubmitSemaphore_.semaphore = wrapper.semaphore_;
 		lastSubmitHandle_ = wrapper.handle_;
 		
@@ -1805,22 +1953,61 @@ namespace Gaia {
 	}*/
 	void VulkanDescriptorSet::write(DescriptorSetLayoutDesc& desc, VulkanContext& ctx_)
 	{
-		VkDescriptorImageInfo imageInfo{};
-		if (!desc.texture.isEmpty())
-		{
-			VulkanImage* image = ctx_.texturesPool_.get(desc.texture);
-			imageInfo.imageLayout = image->vkImageLayout_;
-			imageInfo.imageView = image->imageView_;
-			//imageInfo.sampler = {};
-		}
+		VulkanSampler* sampler = ctx_.samplerPool_.get(desc.sampler);
 
-		VkDescriptorBufferInfo bufInfo{};
-		if (!desc.buffer.isEmpty())
+		if(desc.descriptorType == DescriptorType_SampledImage)
 		{
-			VulkanBuffer* buffer = ctx_.bufferPool_.get(desc.buffer);
-			bufInfo.buffer = buffer->vkBuffer_;
-			bufInfo.offset = uint64_t(0);
-			bufInfo.range = buffer->bufferSize_;
+
+			GAIA_ASSERT(!desc.texture.empty(), "textures array in descriptor description is empty");
+			for (int i = 0; i < desc.texture.size(); i++)
+			{
+				VulkanImage* image = ctx_.texturesPool_.get(desc.texture[i]);
+				imageInfo.push_back(VkDescriptorImageInfo{
+					.sampler = VK_NULL_HANDLE,
+					.imageView = image->imageView_,
+					.imageLayout = image->vkImageLayout_
+					});
+			}
+		}
+		if (desc.descriptorType == DescriptorType_Sampler)
+		{
+
+			GAIA_ASSERT(!desc.sampler.isEmpty(), "sampler in descriptor description is empty");
+
+			imageInfo.push_back(VkDescriptorImageInfo{
+					.sampler = sampler->sampler_,
+					.imageView = VK_NULL_HANDLE,
+				});
+		}
+		if (desc.descriptorType == DescriptorType_CombinedImageSampler)
+		{
+
+			GAIA_ASSERT(!desc.texture.empty(), "textures array in descriptor description is empty");
+			GAIA_ASSERT(!desc.sampler.isEmpty(), "sampler in descriptor description is empty");
+			for (int i = 0; i < desc.texture.size(); i++)
+			{
+				VulkanImage* image = ctx_.texturesPool_.get(desc.texture[i]);
+				imageInfo.push_back(VkDescriptorImageInfo{
+					.sampler = sampler->sampler_,
+					.imageView = image->imageView_,
+					.imageLayout = image->vkImageLayout_
+					});
+			}
+		}
+		if (desc.descriptorType == DescriptorType_StorageBuffer || desc.descriptorType == DescriptorType_UniformBuffer
+			|| desc.descriptorType == DescriptorType_UniformBufferDynamic || desc.descriptorType == DescriptorType_StorageBufferDynamic)
+		{
+
+			GAIA_ASSERT(!desc.buffer.empty(), "buffer array in descriptor description is empty");
+			for (int i = 0; i < desc.buffer.size(); i++)
+			{
+				VulkanBuffer* buffer = ctx_.bufferPool_.get(desc.buffer[i]);
+				bufInfo.push_back(VkDescriptorBufferInfo{
+					.buffer = buffer->vkBuffer_,
+					.offset = 0,
+					.range = buffer->bufferSize_,
+					});
+			}
 		}
 
 		VkWriteDescriptorSet write{};
@@ -1828,10 +2015,10 @@ namespace Gaia {
 		write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		write.descriptorCount = desc.descriptorCount;
 		write.write = VK_NULL_HANDLE;
-		write.pImageInfo = !desc.texture.isEmpty() ? &imageInfo : nullptr;
+		write.pImageInfo = imageInfo.data();
 		write.dstBinding = desc.binding;
 		write.descriptorType = getVkDescTypeFromDescType(desc.descriptorType);
-		write.pBufferInfo = !desc.buffer.isEmpty() ? &bufInfo : nullptr;
+		write.pBufferInfo = bufInfo.data();
 		
 		writes_.push_back(write);
 	}
@@ -1991,8 +2178,25 @@ namespace Gaia {
 	{
 		vkCmdEndRendering(commandBufferWraper_->cmdBuffer_);
 	}
-	void VulkanCommandBuffer::cmdCopyBufferToImage(BufferHandle buffer, TextureHandle texture)
+	void VulkanCommandBuffer::cmdCopyBufferToImage(BufferHandle bufferHandle, TextureHandle textureHandle)
 	{
+		VulkanBuffer* buffer = ctx_->bufferPool_.get(bufferHandle);
+		VulkanImage* image = ctx_->texturesPool_.get(textureHandle);
+		VkBufferImageCopy bufferImageCopy{
+			.bufferOffset = 0,
+			.bufferRowLength = 0,
+			.bufferImageHeight = 0,
+			.imageSubresource = VkImageSubresourceLayers{
+				.aspectMask = image->getImageAspectFlags(),
+				.mipLevel = 0,
+				.baseArrayLayer = 0,
+				.layerCount = 1,
+			},
+			.imageOffset = {0,0,0},
+			.imageExtent = image->vkExtent_,
+		};
+
+		vkCmdCopyBufferToImage(commandBufferWraper_->cmdBuffer_, buffer->vkBuffer_, image->vkImage_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferImageCopy);
 	}
 	void VulkanCommandBuffer::cmdSetViewport(Viewport viewport)
 	{

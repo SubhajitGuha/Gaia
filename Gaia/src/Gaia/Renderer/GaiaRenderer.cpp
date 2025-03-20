@@ -40,3 +40,11 @@ void Gaia::destroy(Gaia::IContext* ctx, Gaia::DescriptorSetLayoutHandle handle)
 		ctx->destroy(handle);
 	}
 }
+
+void Gaia::destroy(IContext* ctx, SamplerHandle handle)
+{
+	if (ctx)
+	{
+		ctx->destroy(handle);
+	}
+}

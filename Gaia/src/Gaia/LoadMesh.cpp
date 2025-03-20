@@ -10,7 +10,10 @@
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
+#include <filesystem>
 #include "Gaia/Renderer/Vulkan/Vulkan.h"
+
+namespace fs = std::filesystem;
 
 namespace Gaia
 { 
@@ -24,7 +27,7 @@ namespace Gaia
 		GlobalTransform = glm::mat4(1.0);
 		//std::filesystem::path mesh_path(Path);
 		//objectName = mesh_path.stem().string();
-		//m_path = (mesh_path.parent_path() / mesh_path.stem()).string() + extension; //temporary
+		m_path = Path;
 
 		//if (m_LOD.size() == 0)
 		//	m_LOD.push_back(this);
@@ -33,6 +36,7 @@ namespace Gaia
 	}
 	LoadMesh::~LoadMesh()
 	{
+		//clear();
 	}
 	void LoadMesh::parse_scene_rec(tinygltf::Node& node)
 	{
@@ -64,7 +68,8 @@ namespace Gaia
 			GAIA_CORE_ERROR("Failed to parse glTF");
 			return;
 		}
-
+		LoadTextures();
+		LoadMatrials();
 		for (auto scene : model.scenes)
 		{
 			for (auto node : scene.nodes)
@@ -191,7 +196,7 @@ namespace Gaia
 				glm::vec3 transformed_normals = (m_subMeshes[k].Normal[i]);//re-orienting the normals (do not include translation as normals only needs to be orinted)
 				glm::vec3 transformed_tangents = (m_subMeshes[k].Tangent[i]);
 				glm::vec3 transformed_binormals = (m_subMeshes[k].BiTangent[i]);
-				buffer[i] = (VertexAttributes(glm::vec4(m_subMeshes[k].Vertices[i], 1.0), m_subMeshes[k].TexCoord[i], transformed_normals, transformed_tangents, transformed_binormals));
+				buffer[i] = (VertexAttributes(glm::vec4(m_subMeshes[k].Vertices[i], 1.0), m_subMeshes[k].TexCoord[i], transformed_normals, transformed_tangents, k));
 			}
 			
 			/*uint32_t buffer_size = buffer.size() * sizeof(VertexAttributes);
@@ -236,13 +241,13 @@ namespace Gaia
 							positionBuffer, &vertexCount);
 					GAIA_ASSERT(componentType == GL_FLOAT, "unexpected component type");
 				}
-				// Get buffer data for vertex color
-				if (glTFPrimitive.attributes.find("COLOR_0") != glTFPrimitive.attributes.end())
-				{
-					auto componentType = LoadAccessor<float>(
-						model.accessors[glTFPrimitive.attributes.find("COLOR_0")->second], colorBuffer);
-					GAIA_ASSERT(componentType == GL_FLOAT, "unexpected component type");
-				}
+				//// Get buffer data for vertex color
+				//if (glTFPrimitive.attributes.find("COLOR_0") != glTFPrimitive.attributes.end())
+				//{
+				//	auto componentType = LoadAccessor<float>(
+				//		model.accessors[glTFPrimitive.attributes.find("COLOR_0")->second], colorBuffer);
+				//	GAIA_ASSERT(componentType == GL_FLOAT, "unexpected component type");
+				//}
 				// Get buffer data for vertex normals
 				if (glTFPrimitive.attributes.find("NORMAL") != glTFPrimitive.attributes.end())
 				{
@@ -314,7 +319,7 @@ namespace Gaia
 
 					//need to construct it
 					m_subMeshes[primitiveIndex].BiTangent.push_back(glm::vec3(t.x, t.y, t.z) * t.w);
-
+					m_subMeshes[primitiveIndex].m_MaterialID = (uint64_t)glTFPrimitive.material;
 					// joint indices and joint weights TODO
 					/*if (jointsBuffer && weightsBuffer)
 					{
@@ -434,5 +439,112 @@ namespace Gaia
 		m_vertexBindingDesc[0].binding = 0;
 		m_vertexBindingDesc[0].stride = sizeof(VertexAttributes);
 		m_vertexBindingDesc[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;*/
+	}
+	void LoadMesh::LoadTextures()
+	{
+		fs::path meshPath = m_path;
+
+		fs::path parentPath = meshPath.parent_path();
+
+		size_t numTextures = model.images.size();
+		for (uint32_t imageIndex = 0; imageIndex < numTextures; ++imageIndex)
+		{
+			Texture texture;
+			fs::path imagePath = model.images[imageIndex].uri;
+
+			fs::path absolutePath = parentPath / imagePath;
+			tinygltf::Image& glTFImage = model.images[imageIndex];
+
+			uint8_t* buffer;
+			uint64_t bufferSize;
+			texture.width = glTFImage.width;
+			texture.height = glTFImage.height;
+			texture.num_channels = glTFImage.component;
+
+			if (glTFImage.component == 3)
+			{
+				bufferSize = glTFImage.width * glTFImage.height * 4;
+				std::vector<uint8_t> imageData(bufferSize, 0);
+				//buffer = new uint8_t[bufferSize]{};
+
+				buffer = (uint8_t*)imageData.data();
+				uint8_t* rgba = buffer;
+				uint8_t* rgb = &glTFImage.image[0];
+				for (int j = 0; j < glTFImage.width * glTFImage.height; ++j)
+				{
+					memcpy(rgba, rgb, sizeof(uint8_t) * 3);
+					rgba += 4;
+					rgb += 3;
+				}
+			}
+			else
+			{
+				buffer = &glTFImage.image[0];
+				bufferSize = glTFImage.image.size();
+			}
+			texture.textureData.resize(bufferSize);
+			for (int i = 0; i < bufferSize; i++)
+			{
+				texture.textureData[i] = buffer[i];
+			}
+			gltfTextures.push_back(texture);
+		}
+	}
+	void LoadMesh::LoadMatrials()
+	{
+		size_t numMaterials = model.materials.size();
+		uint32_t materialIndex = 0u;
+		for (int i = 0; i < numMaterials; i++)
+		{
+			tinygltf::Material glTFMaterial = model.materials[i];
+			Material material = {};
+			// diffuse color aka base color factor
+			// used as constant color, if no diffuse texture is provided
+			// else, multiplied in the shader with each sample from the diffuse texture
+			if (glTFMaterial.values.find("baseColorFactor") != glTFMaterial.values.end())
+			{
+				material.baseColorFactor =
+					glm::make_vec4(glTFMaterial.values["baseColorFactor"].ColorFactor().data());
+			}
+
+			// diffuse map aka basecolor aka albedo
+			if (glTFMaterial.pbrMetallicRoughness.baseColorTexture.index != -1)
+			{
+				int diffuseTextureIndex = glTFMaterial.pbrMetallicRoughness.baseColorTexture.index;
+				tinygltf::Texture& diffuseTexture = model.textures[diffuseTextureIndex];
+				material.baseColorTexture = diffuseTexture.source;
+			}
+			else if (glTFMaterial.values.find("baseColorTexture") != glTFMaterial.values.end())
+			{
+				int diffuseTextureIndex = glTFMaterial.values["baseColorTexture"].TextureIndex();
+				tinygltf::Texture& diffuseTexture = model.textures[diffuseTextureIndex];
+				material.baseColorTexture = diffuseTexture.source;
+			}
+
+			// normal map
+			if (glTFMaterial.normalTexture.index != -1)
+			{
+				int normalTextureIndex = glTFMaterial.normalTexture.index;
+				tinygltf::Texture& normalTexture = model.textures[normalTextureIndex];
+				material.normalStrength = glTFMaterial.normalTexture.scale;
+				material.normalTexture = normalTexture.source;
+			}
+
+			// constant values for roughness and metallicness
+			{
+				material.roughnessFactor = glTFMaterial.pbrMetallicRoughness.roughnessFactor;
+				material.metallicFactor = glTFMaterial.pbrMetallicRoughness.metallicFactor;
+			}
+
+			// texture for roughness and metallicness
+			if (glTFMaterial.pbrMetallicRoughness.metallicRoughnessTexture.index != -1)
+			{
+				int MetallicRoughnessTextureIndex = glTFMaterial.pbrMetallicRoughness.metallicRoughnessTexture.index;
+				tinygltf::Texture& metallicRoughnessTexture = model.textures[MetallicRoughnessTextureIndex];
+				material.metallicRoughnessTexture = metallicRoughnessTexture.source;
+			}
+
+			pbrMaterials.push_back(material);
+		}
 	}
 }

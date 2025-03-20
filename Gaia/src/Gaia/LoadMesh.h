@@ -2,6 +2,7 @@
 #include "Gaia/GltfLoader/tiny_gltf.h"
 #include "glm/glm.hpp"
 #include <glm/gtc/type_ptr.hpp>
+#include "Gaia/Material.h"
 
 #define GL_BYTE 0x1400           // 5120
 #define GL_UNSIGNED_BYTE 0x1401  // 5121
@@ -43,6 +44,17 @@ namespace Gaia
 		LoadMesh();
 		LoadMesh(const std::string& Path);
 		~LoadMesh();
+		void clear() {
+			/*for (uint8_t*& texture : glTfTextures)
+			{
+				delete[] texture;
+				texture = nullptr;
+			}*/
+
+			gltfTextures.clear();
+			m_subMeshes.clear();
+			pbrMaterials.clear();
+		}
 		/*void CreateLOD(const std::string& Path, LoadType type = LoadType::LOAD_MESH);
 		LoadMesh* GetLOD(int lodIndex);*/
 
@@ -53,20 +65,23 @@ namespace Gaia
 			glm::vec2 TextureCoordinate;
 			glm::vec3 Normal;
 			glm::vec3 Tangent;
-			glm::vec3 BiNormal;
-			VertexAttributes(const glm::vec4& Position, const glm::vec2& TextureCoordinate, const glm::vec3& normal = { 0,0,0 }, const glm::vec3& Tangent = { 0,0,0 }, const glm::vec3& BiNormal = { 0,0,0 })
+			uint32_t materialId;
+			VertexAttributes(const glm::vec4& Position, const glm::vec2& TextureCoordinate, const glm::vec3& normal = { 0,0,0 }, const glm::vec3& Tangent = { 0,0,0 }, const uint32_t& materialId = 0u)
 			{
 				this->Position = Position;
 				this->TextureCoordinate = TextureCoordinate;
 				Normal = normal;
 				this->Tangent = Tangent;
-				this->BiNormal = BiNormal;
+				this->materialId = materialId;
 			}
 			VertexAttributes() = default;
 			//may more ..uv coord , tangents , normals..
 		};
 		std::string m_path;
 		std::vector<SubMesh> m_subMeshes;
+		std::vector<Material> pbrMaterials;
+		//gltf textures
+		std::vector<Texture> gltfTextures;
 		//Bounds total_bounds; //total mesh bounds
 		glm::mat4 GlobalTransform;
 		/*std::vector<VkVertexInputAttributeDescription> m_vertexAttribDesc;
@@ -93,6 +108,8 @@ namespace Gaia
 		void CalculateTangent();
 		void CreateStaticBuffers();
 		void CreateVulkanVertexDesc();
+		void LoadTextures();
+		void LoadMatrials();
 
 		void LoadVertexData(int mesh_index);
 		template <typename T>

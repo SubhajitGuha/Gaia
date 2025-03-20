@@ -50,13 +50,13 @@ namespace Gaia {
 		glm::vec3 Up = { 0,1,0 } , RightVector;//we get right vector by getting the cross product of m_ViewDirection and Up vectors
 
 		float m_verticalFOV = 45.f;
-		float m_PerspectiveNear = 0.1;
-		float m_PerspectiveFar = 1000000;
+		float m_PerspectiveNear = 0.01;
+		float m_PerspectiveFar = 10000000000;
 		
 		float m_AspectRatio = 1.0;
 		float m_pitch=0, m_yaw=0, m_roll=0;
 		//camera parameters
-		float m_movespeed = 50;
+		float m_movespeed = 20;
 		glm::vec2 OldMousePos = { 0,0};
 	};
 }

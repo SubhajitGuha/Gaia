@@ -42,7 +42,7 @@ namespace Gaia {
 		bool closeWindow(WindowCloseEvent&);
 		LayerStack m_layerstack;
 		static Application* getApplication;
-		float m_LastFrameTime;
+		float m_LastFrameTime = 0.0;
 	};
 	//define in client (not in engine dll)
 	Application* CreateApplication();

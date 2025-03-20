@@ -54,7 +54,7 @@ namespace Gaia
 	using BufferHandle = Handle<struct Buffer>;
 	using TextureHandle = Handle<struct Texture>;
 	using RenderPipelineHandle = Handle<struct RenderPipeline>;
-	using SamplerHande = Handle<struct Sampler>;
+	using SamplerHandle = Handle<struct Sampler>;
 	using ShaderModuleHandle = Handle<struct ShaderModule>;
 	using DescriptorSetLayoutHandle = Handle<struct DescriptorSetLayout>;
 
@@ -67,9 +67,9 @@ namespace Gaia
 	void destroy(Gaia::IContext* ctx, Gaia::BufferHandle handle);
 	void destroy(Gaia::IContext* ctx, Gaia::TextureHandle handle);
 	void destroy(Gaia::IContext* ctx, Gaia::DescriptorSetLayoutHandle handle);
+	void destroy(IContext* ctx, SamplerHandle handle);
 
 	//void destroy(IContext* ctx, RayTracingPipelineHandle handle);
-	//void destroy(IContext* ctx, SamplerHandle handle);
 	//void destroy(IContext* ctx, QueryPoolHandle handle);
 	//void destroy(IContext* ctx, AccelStructHandle handle);
 
@@ -286,6 +286,36 @@ namespace Gaia
 		const void* data = nullptr;
 		uint32_t dataNumMipLevels = 1; // how many mip-levels we want to upload
 		bool generateMipmaps = false; // generate mip-levels immediately, valid only with non-null data
+		const char* debugName = "";
+	};
+
+	enum SamplerFilter : uint8_t { SamplerFilter_Nearest = 0, SamplerFilter_Linear };
+	enum SamplerMip : uint8_t {SamplerMip_Nearest, SamplerMip_Linear };
+	enum SamplerWrap : uint8_t { SamplerWrap_Repeat = 0, SamplerWrap_Clamp, SamplerWrap_MirrorRepeat };
+
+	enum CompareOp : uint8_t {
+		CompareOp_Never = 0,
+		CompareOp_Less,
+		CompareOp_Equal,
+		CompareOp_LessEqual,
+		CompareOp_Greater,
+		CompareOp_NotEqual,
+		CompareOp_GreaterEqual,
+		CompareOp_AlwaysPass
+	};
+
+	struct SamplerStateDesc {
+		SamplerFilter minFilter = SamplerFilter_Linear;
+		SamplerFilter magFilter = SamplerFilter_Linear;
+		SamplerMip mipMap = SamplerMip_Linear;
+		SamplerWrap wrapU = SamplerWrap_Repeat;
+		SamplerWrap wrapV = SamplerWrap_Repeat;
+		SamplerWrap wrapW = SamplerWrap_Repeat;
+		CompareOp depthCompareOp = CompareOp_LessEqual;
+		uint8_t mipLodMin = 0;
+		uint8_t mipLodMax = 15;
+		uint8_t maxAnisotropic = 8;
+		bool depthCompareEnabled = false;
 		const char* debugName = "";
 	};
 
@@ -526,8 +556,8 @@ namespace Gaia
 		{ }
 	};
 
-	enum DescriptorType : uint8_t {
-		DescriptorType_None,
+	enum DescriptorType : uint32_t {
+		DescriptorType_None = 0,
 		DescriptorType_Sampler,
 		DescriptorType_CombinedImageSampler,
 		DescriptorType_SampledImage,
@@ -542,6 +572,7 @@ namespace Gaia
 		DescriptorType_InlineUniformBlock,
 	};
 
+	
 	struct DescriptorSetLayoutDesc final
 	{
 		uint32_t binding = 0;
@@ -550,9 +581,27 @@ namespace Gaia
 		uint32_t shaderStage = Stage_None;
 
 		//Resources in Descriptor Set
-		TextureHandle texture;
-		BufferHandle buffer;
+		std::vector<TextureHandle> texture;
+		std::vector<BufferHandle> buffer;
+		SamplerHandle sampler;
 		//TODO include other resource types
+
+		template<typename HandleType, typename HolderType>
+		static std::vector<HandleType> getResource(HolderType& handle)
+		{
+			return std::vector<HandleType>{handle};
+		}
+
+		template<typename HandleType, typename HolderType>
+		static std::vector<HandleType> getResource(std::vector<HolderType>& holder)
+		{
+			std::vector<HandleType> handles;
+			for (HolderType& holder_ : holder)
+			{
+				handles.push_back(holder_);
+			}
+			return handles;
+		}
 	};
 
 	struct Viewport {
@@ -635,12 +684,14 @@ namespace Gaia
 		virtual Holder<RenderPipelineHandle> createRenderPipeline(RenderPipelineDesc& desc) = 0;
 		virtual Holder<ShaderModuleHandle> createShaderModule(ShaderModuleDesc& desc) = 0;
 		virtual Holder<DescriptorSetLayoutHandle> createDescriptorSetLayout(std::vector<DescriptorSetLayoutDesc>& desc) = 0;
+		virtual Holder<SamplerHandle> createSampler(SamplerStateDesc& desc) = 0;
 
 		virtual void destroy(BufferHandle handle) = 0;
 		virtual void destroy(TextureHandle handle) = 0;
 		virtual void destroy(RenderPipelineHandle handle) = 0;
 		virtual void destroy(ShaderModuleHandle handle) = 0;
 		virtual void destroy(DescriptorSetLayoutHandle handle) = 0;
+		virtual void destroy(SamplerHandle handle) = 0;
 
 		//swapchain functions
 		virtual TextureHandle getCurrentSwapChainTexture() = 0;

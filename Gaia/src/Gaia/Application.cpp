@@ -24,7 +24,7 @@ namespace Gaia {
 		m_window->SetCallbackEvent(HZ_BIND_FN(OnEvent));
 
 		//renderer = Renderer::create(m_window->GetNativeWindow());
-		//m_window->SetVsync(true);
+		//m_window->SetVsync(false);
 		//Vulkan::Init(m_window);//initilize the scene , enable blending,get gpu info,set culling dist
 		//Vulkan::InitFrameCommandBuffers(); //needed for rendering
 

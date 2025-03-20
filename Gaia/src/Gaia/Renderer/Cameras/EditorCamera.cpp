@@ -7,7 +7,7 @@
 #include "Gaia/GaiaCodes.h"
 
 namespace Gaia {
-	float EditorCamera::camera_MovementSpeed = 50;
+	float EditorCamera::camera_MovementSpeed = 20;
 	EditorCamera::EditorCamera()
 		:m_View(1.0)
 	{

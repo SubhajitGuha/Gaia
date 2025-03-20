@@ -1723,6 +1723,7 @@ Result<Device> DeviceBuilder::build() const {
 #endif
     device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     device_create_info.pNext = &dynamic_rendering_feature;
+    device_create_info.pEnabledFeatures = &physical_device.features;
     device_create_info.flags = info.flags;
     device_create_info.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
     device_create_info.pQueueCreateInfos = queueCreateInfos.data();

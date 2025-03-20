@@ -93,6 +93,12 @@ namespace Gaia {
 		bool isCoherentMemory_ = false;
 	};
 
+	struct VulkanSampler
+	{
+		SamplerStateDesc desc_ = {};
+		VkSampler sampler_ = VK_NULL_HANDLE;
+	};
+
 	struct ShaderModuleState
 	{
 		VkShaderModule sm = VK_NULL_HANDLE;
@@ -310,6 +316,8 @@ namespace Gaia {
 		VkDescriptorSet set_ = VK_NULL_HANDLE;
 		uint32_t maxSets_ = 5;
 		std::vector<VkWriteDescriptorSet> writes_ = {};
+		std::vector<VkDescriptorImageInfo> imageInfo;
+		std::vector<VkDescriptorBufferInfo> bufInfo;
 		const char* debugName_ = "";
 	public:
 		VulkanDescriptorSetLayout layout_;
@@ -325,12 +333,12 @@ namespace Gaia {
 
 		void copyBuffer(BufferHandle bufferHandle, void* data, size_t sizeInBytes, uint32_t offset = 0) override;
 
-		void cmdCopyBufferToBuffer(BufferHandle srcBufferHandle, BufferHandle dstBufferHandle, uint32_t offset = 0) override;
 		void cmdTransitionImageLayout(TextureHandle image, ImageLayout newLayout) override;
 		void cmdBindGraphicsPipeline(RenderPipelineHandle renderPipeline) override;
 		void cmdBeginRendering(TextureHandle colorAttachmentHandle, TextureHandle depthTextureHandle, ClearValue* clearValue) override;
 		void cmdEndRendering() override;
 
+		void cmdCopyBufferToBuffer(BufferHandle srcBufferHandle, BufferHandle dstBufferHandle, uint32_t offset = 0) override;
 		void cmdCopyBufferToImage(BufferHandle buffer, TextureHandle texture) override;
 
 		void cmdSetViewport(Viewport viewport) override;
@@ -380,12 +388,14 @@ namespace Gaia {
 		Holder<RenderPipelineHandle> createRenderPipeline(RenderPipelineDesc& desc) override;
 		Holder<ShaderModuleHandle> createShaderModule(ShaderModuleDesc& desc) override;
 		Holder<DescriptorSetLayoutHandle> createDescriptorSetLayout(std::vector<DescriptorSetLayoutDesc>& desc) override;
+		Holder<SamplerHandle> createSampler(SamplerStateDesc& desc);
 
 		void destroy(BufferHandle handle) override;
 		void destroy(TextureHandle handle) override;
 		void destroy(RenderPipelineHandle handle) override;
 		void destroy(ShaderModuleHandle handle) override;
 		void destroy(DescriptorSetLayoutHandle handle) override;
+		void destroy(SamplerHandle handle);
 
 		//swapchain functions
 		TextureHandle getCurrentSwapChainTexture() override;
@@ -455,6 +465,7 @@ namespace Gaia {
 		Pool<RenderPipeline, RenderPipelineState> renderPipelinePool_;
 		Pool<ShaderModule, ShaderModuleState> shaderModulePool_;
 		Pool<DescriptorSetLayout, VulkanDescriptorSet> descriptorSetPool_;
+		Pool<Sampler, VulkanSampler> samplerPool_;
 	};
 
 	inline VkBlendOp getVkBlendOpFromBlendOp(BlendOp operation);

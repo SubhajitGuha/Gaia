@@ -5,12 +5,12 @@
 GaiaEditor::GaiaEditor()
 {
 	Window& window = Application::Get().GetWindow();
-	renderer_ = Gaia::Renderer::create(window.GetNativeWindow());
 	scene_ = Gaia::Scene::create(SceneDescriptor{
-		.meshPath = "C:/Users/Subhajit/Downloads/cube.gltf",
+		.meshPath = "C:/Users/Subhajit/OneDrive/Documents/sponza.gltf",
 		.windowWidth = window.GetWidth(),
 		.windowHeight = window.GetHeight() 
 		});
+	renderer_ = Gaia::Renderer::create(window.GetNativeWindow(), *scene_);
 	renderer_->createStaticBuffers(*scene_);
 }
 
