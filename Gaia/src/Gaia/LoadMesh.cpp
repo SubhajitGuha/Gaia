@@ -11,7 +11,6 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 #include <filesystem>
-#include "Gaia/Renderer/Vulkan/Vulkan.h"
 
 namespace fs = std::filesystem;
 

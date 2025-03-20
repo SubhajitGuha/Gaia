@@ -4,7 +4,7 @@
 #include "backends/imgui_impl_vulkan.h"
 #include "backends/imgui_impl_glfw.h"
 #include "imgui_internal.h"
-#include "Gaia/Renderer/Vulkan/Vulkan.h"
+//#include "Gaia/Renderer/Vulkan/Vulkan.h"
 #include "Gaia/Log.h"
 #include "Gaia/Core.h"
 
@@ -61,64 +61,64 @@ namespace Gaia {
 		// Setup Platform/Renderer backends
 		ImGui_ImplGlfw_InitForVulkan(window, true);
 
-		auto vulkan_ctx = Vulkan::GetVulkanContext();
+		//auto vulkan_ctx = Vulkan::GetVulkanContext();
 
-		VkDescriptorPoolSize pool_sizes[] = {
-			{ VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
-		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
-		{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
-		{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
-		{ VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
-		{ VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
-		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
-		{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
-		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
-		{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
-		{ VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 }
-		};
+		//VkDescriptorPoolSize pool_sizes[] = {
+		//	{ VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
+		//{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+		//{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
+		//{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
+		//{ VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
+		//{ VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
+		//{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
+		//{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
+		//{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+		//{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+		//{ VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 }
+		//};
 
-		VkDescriptorPoolCreateInfo poolInfo{};
-		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-		poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-		poolInfo.maxSets = 1000;
-		poolInfo.poolSizeCount = (uint32_t)std::size(pool_sizes);
-		poolInfo.pPoolSizes = pool_sizes;
+		//VkDescriptorPoolCreateInfo poolInfo{};
+		//poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		//poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+		//poolInfo.maxSets = 1000;
+		//poolInfo.poolSizeCount = (uint32_t)std::size(pool_sizes);
+		//poolInfo.pPoolSizes = pool_sizes;
 
-		auto res = vkCreateDescriptorPool(vulkan_ctx->m_device, &poolInfo, nullptr, &ImGuiPool);
-		if (res != VK_SUCCESS)
-		{
-			GAIA_CORE_ERROR("Failed to create Descriptor pool ERROR CODE: {}", res);
-		}
+		//auto res = vkCreateDescriptorPool(vulkan_ctx->m_device, &poolInfo, nullptr, &ImGuiPool);
+		//if (res != VK_SUCCESS)
+		//{
+		//	GAIA_CORE_ERROR("Failed to create Descriptor pool ERROR CODE: {}", res);
+		//}
 
-		// this initializes imgui for Vulkan
-		ImGui_ImplVulkan_InitInfo info = {};
-		info.Instance = vulkan_ctx->m_instance;
-		info.PhysicalDevice = vulkan_ctx->m_physical_device;
-		info.Device = vulkan_ctx->m_device;
-		info.Queue = vulkan_ctx->m_queue;
-		info.DescriptorPool = ImGuiPool;
-		info.MinImageCount = 3;
-		info.ImageCount = 3;
-		info.UseDynamicRendering = true;
+		//// this initializes imgui for Vulkan
+		//ImGui_ImplVulkan_InitInfo info = {};
+		//info.Instance = vulkan_ctx->m_instance;
+		//info.PhysicalDevice = vulkan_ctx->m_physical_device;
+		//info.Device = vulkan_ctx->m_device;
+		//info.Queue = vulkan_ctx->m_queue;
+		//info.DescriptorPool = ImGuiPool;
+		//info.MinImageCount = 3;
+		//info.ImageCount = 3;
+		//info.UseDynamicRendering = true;
 
-		info.PipelineRenderingCreateInfo = { VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
-		info.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
-		info.PipelineRenderingCreateInfo.pColorAttachmentFormats = &vulkan_ctx->m_swapchain_image_format;
+		//info.PipelineRenderingCreateInfo = { VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
+		//info.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+		//info.PipelineRenderingCreateInfo.pColorAttachmentFormats = &vulkan_ctx->m_swapchain_image_format;
 
-		info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+		//info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 
 
-		ImGui_ImplVulkan_Init(&info);
-		ImGui_ImplVulkan_CreateFontsTexture();
+		/*ImGui_ImplVulkan_Init(&info);
+		ImGui_ImplVulkan_CreateFontsTexture();*/
 	}
 
 	void ImGuiLayer::OnDetach()
 	{
 		//wait for gpu to compleate all its tasks
-		GAIA_ASSERT(vkDeviceWaitIdle(Vulkan::GetVulkanContext()->m_device)==VK_SUCCESS , "");
+		//GAIA_ASSERT(vkDeviceWaitIdle(Vulkan::GetVulkanContext()->m_device)==VK_SUCCESS , "");
 		ImGui_ImplGlfw_Shutdown();
 		ImGui_ImplVulkan_Shutdown();
-		vkDestroyDescriptorPool(Vulkan::GetVulkanContext()->m_device, ImGuiPool, nullptr);
+		//vkDestroyDescriptorPool(Vulkan::GetVulkanContext()->m_device, ImGuiPool, nullptr);
 		ImGui::DestroyContext();
 	}
 

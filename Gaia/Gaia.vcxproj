@@ -170,7 +170,6 @@
     <ClInclude Include="src\Gaia\Renderer\Renderer.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkBootstrap.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkBootstrapDispatch.h" />
-    <ClInclude Include="src\Gaia\Renderer\Vulkan\VkDescriptorSet.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkInitializers.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkUtils.h" />
     <ClInclude Include="src\Gaia\TimeSteps.h" />
@@ -486,7 +485,6 @@
     <ClCompile Include="src\Gaia\Renderer\GaiaRenderer.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Renderer.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkBootstrap.cpp" />
-    <ClCompile Include="src\Gaia\Renderer\Vulkan\VkDescriptorSet.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkInitializers.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkUtils.cpp" />
     <ClCompile Include="src\Gaia\Window.cpp" />
