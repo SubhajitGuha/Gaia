@@ -1669,11 +1669,17 @@ Result<Device> DeviceBuilder::build() const {
     if (physical_device.surface != VK_NULL_HANDLE || physical_device.defer_surface_initialization)
         extensions_to_enable.push_back({ VK_KHR_SWAPCHAIN_EXTENSION_NAME });
 
+
     //set up for dynamic rendering
     VkPhysicalDeviceVulkan13Features dynamic_rendering_feature{};
     dynamic_rendering_feature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
     dynamic_rendering_feature.synchronization2 = true;
     dynamic_rendering_feature.dynamicRendering = true;
+
+    VkPhysicalDeviceVulkan12Features vk12_features{};
+    vk12_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    vk12_features.runtimeDescriptorArray = true;
+    vk12_features.pNext = &dynamic_rendering_feature;
 
     extensions_to_enable.push_back({ VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME });
     
@@ -1722,7 +1728,7 @@ Result<Device> DeviceBuilder::build() const {
     }
 #endif
     device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    device_create_info.pNext = &dynamic_rendering_feature;
+    device_create_info.pNext = &vk12_features;
     device_create_info.pEnabledFeatures = &physical_device.features;
     device_create_info.flags = info.flags;
     device_create_info.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());

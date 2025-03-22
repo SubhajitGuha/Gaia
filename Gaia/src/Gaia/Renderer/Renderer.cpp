@@ -45,14 +45,22 @@ namespace Gaia
         mvpBufferStaging = renderContext_->createBuffer(bufDesc2);
 
         
-        std::vector<DescriptorSetLayoutDesc> layoutDesc;
-        layoutDesc.push_back(DescriptorSetLayoutDesc{
-            .binding = 0,
-            .descriptorCount = 1,
-            .descriptorType = DescriptorType_UniformBuffer,
-            .shaderStage = Stage_Vert | Stage_Frag,
-            .buffer = DescriptorSetLayoutDesc::getResource<BufferHandle>(mvpBuffer),
-            });
+        std::vector<DescriptorSetLayoutDesc> layoutDesc{
+            DescriptorSetLayoutDesc{
+                .binding = 0,
+                .descriptorCount = 1,
+                .descriptorType = DescriptorType_UniformBuffer,
+                .shaderStage = Stage_Vert | Stage_Frag,
+                .buffer = DescriptorSetLayoutDesc::getResource<BufferHandle>(mvpBuffer),
+            },
+             DescriptorSetLayoutDesc{
+                .binding = 1,
+                .descriptorCount = 1,
+                .descriptorType = DescriptorType_StorageBuffer,
+                .shaderStage = Stage_Vert | Stage_Frag,
+                .buffer = DescriptorSetLayoutDesc::getResource<BufferHandle>(transformsBuffer),
+            }
+        };
          mvpMatrixDescriptorSetLayout = renderContext_->createDescriptorSetLayout(layoutDesc);
 
          std::vector<DescriptorSetLayoutDesc> meshLayoutDesc{
@@ -125,6 +133,11 @@ namespace Gaia
         vi.attributes[4].format = Format_R_UI32;
         vi.attributes[4].location = 4;
         vi.attributes[4].offset = offsetof(LoadMesh::VertexAttributes, materialId);
+       
+        vi.attributes[5].binding = 0;
+        vi.attributes[5].format = Format_R_UI32;
+        vi.attributes[5].location = 5;
+        vi.attributes[5].offset = offsetof(LoadMesh::VertexAttributes, meshId);
 
         vi.inputBindings[0].stride = sizeof(LoadMesh::VertexAttributes);
         desc.vertexInput = vi;
@@ -217,11 +230,23 @@ namespace Gaia
         matBufferDesc.storage_type = StorageType_HostVisible;
         Holder<BufferHandle> materialsBufferStaging = renderContext_->createBuffer(matBufferDesc);
 
+        BufferDesc transformBufferDesc{
+            .usage_type = BufferUsageBits_Storage,
+            .storage_type = StorageType_Device,
+            .size = mesh.transforms.size() * sizeof(glm::mat4),
+        };
+        transformsBuffer = renderContext_->createBuffer(transformBufferDesc);
+
+        transformBufferDesc.storage_type = StorageType_HostVisible;
+        Holder<BufferHandle> transformBufferStaging = renderContext_->createBuffer(transformBufferDesc);
+
         //copy the staging buffers to device visible buffers
         {
             ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
             cmdBuffer.copyBuffer(materialsBufferStaging, mesh.pbrMaterials.data(), matBufferDesc.size);
+            cmdBuffer.copyBuffer(transformBufferStaging, mesh.transforms.data(), transformBufferDesc.size);
             cmdBuffer.cmdCopyBufferToBuffer(materialsBufferStaging, materialsBuffer);
+            cmdBuffer.cmdCopyBufferToBuffer(transformBufferStaging, transformsBuffer);
             renderContext_->submit(cmdBuffer);
         }
     }
@@ -240,13 +265,14 @@ namespace Gaia
 
         for (int k = 0; k < mesh.m_subMeshes.size(); k++)
         {
+            SubMesh& subMesh = mesh.m_subMeshes[k];
             std::vector<LoadMesh::VertexAttributes> buffer(mesh.m_subMeshes[k].Vertices.size());
-            for (int i = 0; i < mesh.m_subMeshes[k].Vertices.size(); i++)
+            for (int i = 0; i < subMesh.Vertices.size(); i++)
             {
-                glm::vec3 transformed_normals = (mesh.m_subMeshes[k].Normal[i]);//re-orienting the normals (do not include translation as normals only needs to be orinted)
-                glm::vec3 transformed_tangents = (mesh.m_subMeshes[k].Tangent[i]);
-                glm::vec3 transformed_binormals = (mesh.m_subMeshes[k].BiTangent[i]);
-                buffer[i] = (LoadMesh::VertexAttributes(glm::vec4(mesh.m_subMeshes[k].Vertices[i], 1.0), mesh.m_subMeshes[k].TexCoord[i], transformed_normals, transformed_tangents, k));
+                glm::vec3 transformed_normals = (subMesh.Normal[i]);//re-orienting the normals (do not include translation as normals only needs to be orinted)
+                glm::vec3 transformed_tangents = (subMesh.Tangent[i]);
+                glm::vec3 transformed_binormals = (subMesh.BiTangent[i]);
+                buffer[i] = (LoadMesh::VertexAttributes(glm::vec4(subMesh.Vertices[i], 1.0), subMesh.TexCoord[i], transformed_normals, transformed_tangents,subMesh.m_MaterialID[i], subMesh.meshIndices[i]));
             }
 
             BufferDesc vertexBufferDesc{
@@ -289,11 +315,13 @@ namespace Gaia
     }
     void Renderer::update(Scene& scene)
     {
+        LoadMesh& mesh = scene.getMesh();
+
        EditorCamera& camera = scene.getMainCamera();
        mvpData.view = camera.GetViewMatrix();
        mvpData.projection = camera.GetProjectionMatrix();
 
-      ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
+       ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
       cmdBuffer.copyBuffer(mvpBufferStaging, &mvpData, sizeof(MVPMatrices));
       cmdBuffer.cmdCopyBufferToBuffer(mvpBufferStaging, mvpBuffer);
       renderContext_->submit(cmdBuffer);

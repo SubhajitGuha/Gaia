@@ -4,6 +4,7 @@
 #include <vma/vk_mem_alloc.h>
 #include "Gaia/Renderer/GaiaRenderer.h"
 #include <future>
+#include <array>
 
 #define MAX_MIP_LEVELS 16
 #define ONE_SEC_TO_NANOSEC 1000000000
@@ -303,6 +304,9 @@ namespace Gaia {
 
 	struct VulkanDescriptorSet final
 	{
+		enum { MAX_IMAGE_DESCRIPTOR = 1000 };
+		enum { MAX_BUFFER_DESCRIPTOR = 100 };
+
 	public:
 		
 		void write(DescriptorSetLayoutDesc& desc, VulkanContext& ctx_);
@@ -316,8 +320,10 @@ namespace Gaia {
 		VkDescriptorSet set_ = VK_NULL_HANDLE;
 		uint32_t maxSets_ = 5;
 		std::vector<VkWriteDescriptorSet> writes_ = {};
-		std::vector<VkDescriptorImageInfo> imageInfo;
-		std::vector<VkDescriptorBufferInfo> bufInfo;
+		//need static array for the pointer tobe valid
+		std::array<VkDescriptorImageInfo, MAX_IMAGE_DESCRIPTOR> imageInfo;
+		std::array<VkDescriptorBufferInfo, MAX_BUFFER_DESCRIPTOR> bufferInfo;
+		uint32_t totalDescriptorCount = 0;
 		const char* debugName_ = "";
 	public:
 		VulkanDescriptorSetLayout layout_;

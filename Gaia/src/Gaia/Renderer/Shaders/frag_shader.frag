@@ -2,7 +2,7 @@
 #extension GL_EXT_nonuniform_qualifier : enable
 
 //shader input
-flat layout (location = 0) in uint meshIndex;
+flat layout (location = 0) in uint materialId;
 layout (location = 1) in vec2 texCoord;
 
 
@@ -31,8 +31,8 @@ layout (location = 0) out vec4 outFragColor;
 
 void main() 
 {
-	Material mat = materialBuffer.materials[meshIndex];
+	Material mat = materialBuffer.materials[materialId];
 
-	vec4 albedo = texture(textures[mat.baseColorTexture], texCoord);
+	vec4 albedo = mat.baseColorTexture!=-1? texture(textures[mat.baseColorTexture], texCoord): vec4(1.0,0.0,1.0,1.0);
 	outFragColor = albedo;//vec4(1.0f);
 }

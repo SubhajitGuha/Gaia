@@ -33,6 +33,7 @@ namespace Gaia
 		Holder<ShaderModuleHandle> fragmentShaderModule;
 		Holder<BufferHandle> mvpBuffer;
 		Holder<BufferHandle> mvpBufferStaging;
+		Holder<BufferHandle> transformsBuffer;
 		std::vector<Holder<BufferHandle>> vertexBuffer;
 		std::vector<Holder<BufferHandle>> indexBuffer;
 		Holder<TextureHandle> depthAttachment;

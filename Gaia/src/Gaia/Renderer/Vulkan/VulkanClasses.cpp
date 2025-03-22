@@ -1961,8 +1961,10 @@ namespace Gaia {
 			GAIA_ASSERT(!desc.texture.empty(), "textures array in descriptor description is empty");
 			for (int i = 0; i < desc.texture.size(); i++)
 			{
+				int index = i + totalDescriptorCount;
+				GAIA_ASSERT(index < MAX_IMAGE_DESCRIPTOR, "index exceeded the MAX_IMAGE_DESCRIPTOR");
 				VulkanImage* image = ctx_.texturesPool_.get(desc.texture[i]);
-				imageInfo.push_back(VkDescriptorImageInfo{
+				imageInfo[index] = (VkDescriptorImageInfo{
 					.sampler = VK_NULL_HANDLE,
 					.imageView = image->imageView_,
 					.imageLayout = image->vkImageLayout_
@@ -1973,8 +1975,10 @@ namespace Gaia {
 		{
 
 			GAIA_ASSERT(!desc.sampler.isEmpty(), "sampler in descriptor description is empty");
+			int index = totalDescriptorCount;
+			GAIA_ASSERT(index < MAX_IMAGE_DESCRIPTOR, "index exceeded the MAX_IMAGE_DESCRIPTOR");
 
-			imageInfo.push_back(VkDescriptorImageInfo{
+			imageInfo[index] = (VkDescriptorImageInfo{
 					.sampler = sampler->sampler_,
 					.imageView = VK_NULL_HANDLE,
 				});
@@ -1986,8 +1990,11 @@ namespace Gaia {
 			GAIA_ASSERT(!desc.sampler.isEmpty(), "sampler in descriptor description is empty");
 			for (int i = 0; i < desc.texture.size(); i++)
 			{
+				int index = i + totalDescriptorCount;
+				GAIA_ASSERT(index < MAX_IMAGE_DESCRIPTOR, "index exceeded the MAX_IMAGE_DESCRIPTOR");
+
 				VulkanImage* image = ctx_.texturesPool_.get(desc.texture[i]);
-				imageInfo.push_back(VkDescriptorImageInfo{
+				imageInfo[index] = (VkDescriptorImageInfo{
 					.sampler = sampler->sampler_,
 					.imageView = image->imageView_,
 					.imageLayout = image->vkImageLayout_
@@ -2001,8 +2008,11 @@ namespace Gaia {
 			GAIA_ASSERT(!desc.buffer.empty(), "buffer array in descriptor description is empty");
 			for (int i = 0; i < desc.buffer.size(); i++)
 			{
+				int index = i + totalDescriptorCount;
+				GAIA_ASSERT(index < MAX_BUFFER_DESCRIPTOR, "index exceeded the MAX_BUFFER_DESCRIPTOR");
+
 				VulkanBuffer* buffer = ctx_.bufferPool_.get(desc.buffer[i]);
-				bufInfo.push_back(VkDescriptorBufferInfo{
+				bufferInfo[index] = (VkDescriptorBufferInfo{
 					.buffer = buffer->vkBuffer_,
 					.offset = 0,
 					.range = buffer->bufferSize_,
@@ -2015,11 +2025,12 @@ namespace Gaia {
 		write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		write.descriptorCount = desc.descriptorCount;
 		write.write = VK_NULL_HANDLE;
-		write.pImageInfo = imageInfo.data();
+		write.pImageInfo = desc.texture.empty()? VK_NULL_HANDLE: &imageInfo[totalDescriptorCount];
 		write.dstBinding = desc.binding;
 		write.descriptorType = getVkDescTypeFromDescType(desc.descriptorType);
-		write.pBufferInfo = bufInfo.data();
+		write.pBufferInfo = desc.buffer.empty() ? VK_NULL_HANDLE: &bufferInfo[totalDescriptorCount];
 		
+		totalDescriptorCount += desc.descriptorCount;
 		writes_.push_back(write);
 	}
 	void VulkanDescriptorSet::updateSet()

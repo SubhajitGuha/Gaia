@@ -29,12 +29,13 @@ namespace Gaia
 		std::vector<glm::vec3> BiTangent;
 		std::vector<glm::vec2> TexCoord;
 		std::vector<uint32_t> indices;
+		std::vector<uint32_t> m_MaterialID; //storing material id per vertex (might not be ideal)
+		std::vector<uint32_t> meshIndices; //storing mesh id per vertex (might not be ideal)
 
 		/*VkBufferCreator vk_mesh_vertex_buffer;
 		VkBufferCreator vk_mesh_index_buffer;*/
 
 		//ref<VertexArray> VertexArray;
-		uint64_t m_MaterialID;
 		uint32_t numVertices;
 		//Bounds mesh_bounds; //sub_mesh bounds
 	};
@@ -66,16 +67,17 @@ namespace Gaia
 			glm::vec3 Normal;
 			glm::vec3 Tangent;
 			uint32_t materialId;
-			VertexAttributes(const glm::vec4& Position, const glm::vec2& TextureCoordinate, const glm::vec3& normal = { 0,0,0 }, const glm::vec3& Tangent = { 0,0,0 }, const uint32_t& materialId = 0u)
+			uint32_t meshId;
+			VertexAttributes(const glm::vec4& Position, const glm::vec2& TextureCoordinate, const glm::vec3& normal = { 0,0,0 }, const glm::vec3& Tangent = { 0,0,0 }, const uint32_t& materialId = 0u, const uint32_t& meshId = 0)
 			{
 				this->Position = Position;
 				this->TextureCoordinate = TextureCoordinate;
 				Normal = normal;
 				this->Tangent = Tangent;
 				this->materialId = materialId;
+				this->meshId = meshId;
 			}
 			VertexAttributes() = default;
-			//may more ..uv coord , tangents , normals..
 		};
 		std::string m_path;
 		std::vector<SubMesh> m_subMeshes;
@@ -83,34 +85,22 @@ namespace Gaia
 		//gltf textures
 		std::vector<Texture> gltfTextures;
 		//Bounds total_bounds; //total mesh bounds
-		glm::mat4 GlobalTransform;
-		/*std::vector<VkVertexInputAttributeDescription> m_vertexAttribDesc;
-		std::vector < VkVertexInputBindingDescription> m_vertexBindingDesc;*/
-		//uint64_t uuid;
+		std::vector<glm::mat4> transforms;
 	private:
-		//VmaAllocation m_allocation;
 		std::string extension = ".asset";
 		std::string objectName;
 		std::vector<LoadMesh*> m_LOD;
-		/*ref<BufferLayout> bl;
-		ref<VertexBuffer> vb;
-		ref<IndexBuffer> ib;*/
 		std::vector<aiMesh*> m_Mesh;
 		tinygltf::Model model;
 		tinygltf::TinyGLTF loader;
-		
+		int numMeshes = 0;//mesh count we get from gltf mesh
 	private:
-		void parse_scene_rec(tinygltf::Node& node);
+		void parse_scene_rec(tinygltf::Node& node, glm::mat4 nodeTransform, int parentIndex);
 		void LoadObj(const std::string& Path);
-		void ProcessNode(aiNode* Node, const aiScene* scene);
-		void ProcessMesh();
-		void ProcessMaterials(const aiScene* scene);
-		void CalculateTangent();
-		void CreateStaticBuffers();
-		void CreateVulkanVertexDesc();
 		void LoadTextures();
 		void LoadMatrials();
-
+		void LoadTransforms(int nodeIndex, glm::mat4& parentTransform);
+		glm::mat4 getTransform(int nodeIndex);
 		void LoadVertexData(int mesh_index);
 		template <typename T>
 		int LoadAccessor(const tinygltf::Accessor& accessor, const T*& pointer, uint32_t* count = nullptr, int* type = nullptr)
