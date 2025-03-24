@@ -23,19 +23,18 @@ namespace Gaia {
 		m_window = ref<Window>(Window::Create({ "Gaia", 1920, 1200 }));
 		m_window->SetCallbackEvent(HZ_BIND_FN(OnEvent));
 
-		//renderer = Renderer::create(m_window->GetNativeWindow());
-		//m_window->SetVsync(false);
-		//Vulkan::Init(m_window);//initilize the scene , enable blending,get gpu info,set culling dist
-		//Vulkan::InitFrameCommandBuffers(); //needed for rendering
-
-		/*m_ImGuiLayer = new ImGuiLayer();
-		PushOverlay(m_ImGuiLayer);*/
+	}
+	//ImGui layer is created when we set the rendering context
+	void Application::setImGuiRenderingContext(IContext& context, TextureHandle renderTarget)
+	{
+		m_ImGuiLayer = new ImGuiLayer(&context);
+		m_ImGuiLayer->setRenderTarget(renderTarget);
+		PushOverlay(m_ImGuiLayer);
 	}
 
 	Application::~Application()
 	{
-		/*m_ImGuiLayer->OnDetach();
-		Vulkan::Destroy();*/
+		//m_ImGuiLayer->OnDetach();
 	}
 
 	void Application::OnEvent(Event& e)
@@ -53,9 +52,6 @@ namespace Gaia {
 				break;
 			(*--it)->OnEvent(e);
 		}
-
-		//TODO remove this
-		//Vulkan::GetVulkanContext()->m_renderer->OnEvent(e); //should be done on the client side
 	}
 
 	void Application::PushLayer(Layer* layer)
@@ -69,6 +65,7 @@ namespace Gaia {
 		m_layerstack.PushOverlay(Overlay);
 		Overlay->OnAttach();
 	}
+
 
 	bool Application::closeWindow(WindowCloseEvent& EventClose)
 	{
@@ -91,20 +88,15 @@ namespace Gaia {
 			for (Layer* layer : m_layerstack)
 				layer->OnUpdate(deltaTime);
 
-			//TODO remove this
-			//Vulkan::GetVulkanContext()->m_renderer->OnUpdate(deltaTime);
-			
+			GAIA_ASSERT(m_ImGuiLayer!=nullptr, "Gui layer cannot be null, make sure to set gui layer in the client side")
 			//for ImguiLayers
-			//m_ImGuiLayer->Begin();
+			m_ImGuiLayer->Begin();
 			for (Layer* layer : m_layerstack)
 				layer->OnImGuiRender();
-			//m_ImGuiLayer->End();
-
-			//Vulkan::GetVulkanContext()->Render();
-			//renderer->render();
+			m_ImGuiLayer->End();
 
 		}
-		//m_ImGuiLayer->OnDetach();
+		m_ImGuiLayer->OnDetach();
 	}
 
 

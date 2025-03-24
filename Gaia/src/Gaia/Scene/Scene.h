@@ -14,6 +14,12 @@ namespace Gaia
 		uint32_t windowHeight = 0;
 
 	};
+	struct LightParameters {
+		glm::vec3 color = glm::vec4(1.0);
+		float intensity = 1.0;
+		glm::vec3 direction = { 0.5,0.5,0.0 };
+		float pad = 0.0;
+	};
 	class Scene final
 	{
 	public:
@@ -47,6 +53,8 @@ namespace Gaia
 		inline LoadMesh& getMesh() const { return *mesh_; }
 		void update(TimeStep ts);
 		void onEvent(Event& event);
+	public:
+		LightParameters lightParameter{};
 	private:
 		std::unique_ptr<EditorCamera> mainCamera_;
 		std::unique_ptr<LoadMesh> mesh_;

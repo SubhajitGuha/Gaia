@@ -1,6 +1,7 @@
 #include "GaiaEditor.h"
 #include "Gaia/Application.h"
 #include "Gaia/Window.h"
+#include "imgui.h"
 
 GaiaEditor::GaiaEditor()
 {
@@ -11,6 +12,8 @@ GaiaEditor::GaiaEditor()
 		.windowHeight = window.GetHeight() 
 		});
 	renderer_ = Gaia::Renderer::create(window.GetNativeWindow(), *scene_);
+	//imp set imgui rendering context.
+	Application::Get().setImGuiRenderingContext(*renderer_->getContext(), renderer_->getRenderTarget());
 	renderer_->createStaticBuffers(*scene_);
 }
 
@@ -32,6 +35,11 @@ void GaiaEditor::OnUpdate(float deltatime)
 
 void GaiaEditor::OnImGuiRender()
 {
+	ImGui::Begin("Light");
+	ImGui::DragFloat3("Light Direction", &scene_->lightParameter.direction.x,0.1);
+	ImGui::ColorEdit3("Light Color", &scene_->lightParameter.color.x);
+	ImGui::DragFloat("Light Intensity", &scene_->lightParameter.intensity, 0.1);
+	ImGui::End();
 }
 
 void GaiaEditor::OnEvent(Event& e)

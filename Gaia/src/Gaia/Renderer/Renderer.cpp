@@ -8,6 +8,16 @@ namespace Gaia
     Renderer::Renderer(void* window, Scene& scene)
     {
         renderContext_ = std::make_unique<VulkanContext>(window);
+        auto windowSize = renderContext_->getWindowSize();
+
+        TextureDesc rtDesc{
+            .type = TextureType_2D,
+            .format = Format_RGBA_SRGB8,
+            .dimensions = {windowSize.first, windowSize.second, 1},
+            .usage = TextureUsageBits_Attachment,
+            .storage = StorageType_Device,
+        };
+        renderTarget_ = renderContext_->createTexture(rtDesc);
 
         createGpuMeshTexturesAndBuffers(scene);
 
@@ -20,7 +30,6 @@ namespace Gaia
 
         imageSampler = renderContext_->createSampler(samplerDesc);
 
-        auto windowSize = renderContext_->getWindowSize();
         TextureDesc depthTexDesc{
             .type = TextureType_2D,
             .format = Format_Z_F32,
@@ -44,7 +53,16 @@ namespace Gaia
         };
         mvpBufferStaging = renderContext_->createBuffer(bufDesc2);
 
-        
+        BufferDesc lightParamBufferDesc{
+            .usage_type = BufferUsageBits_Uniform,
+           .storage_type = StorageType_Device,
+           .size = sizeof(LightParameters),
+        };
+        lightParameterBuffer = renderContext_->createBuffer(lightParamBufferDesc);
+
+        lightParamBufferDesc.storage_type = StorageType_HostVisible;
+        lightParameterBufferStaging = renderContext_->createBuffer(lightParamBufferDesc);
+
         std::vector<DescriptorSetLayoutDesc> layoutDesc{
             DescriptorSetLayoutDesc{
                 .binding = 0,
@@ -59,6 +77,13 @@ namespace Gaia
                 .descriptorType = DescriptorType_StorageBuffer,
                 .shaderStage = Stage_Vert | Stage_Frag,
                 .buffer = DescriptorSetLayoutDesc::getResource<BufferHandle>(transformsBuffer),
+            },
+            DescriptorSetLayoutDesc{
+                .binding = 2,
+                .descriptorCount = 1,
+                .descriptorType = DescriptorType_UniformBuffer,
+                .shaderStage = Stage_Frag | Stage_Vert,
+                .buffer = DescriptorSetLayoutDesc::getResource<BufferHandle>(lightParameterBuffer),
             }
         };
          mvpMatrixDescriptorSetLayout = renderContext_->createDescriptorSetLayout(layoutDesc);
@@ -317,14 +342,18 @@ namespace Gaia
     {
         LoadMesh& mesh = scene.getMesh();
 
-       EditorCamera& camera = scene.getMainCamera();
-       mvpData.view = camera.GetViewMatrix();
-       mvpData.projection = camera.GetProjectionMatrix();
+        EditorCamera& camera = scene.getMainCamera();
+        mvpData.view = camera.GetViewMatrix();
+        mvpData.projection = camera.GetProjectionMatrix();
+        mvpData.viewDir = camera.GetViewDirection();
+        mvpData.camPos = camera.GetCameraPosition();
 
-       ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
-      cmdBuffer.copyBuffer(mvpBufferStaging, &mvpData, sizeof(MVPMatrices));
-      cmdBuffer.cmdCopyBufferToBuffer(mvpBufferStaging, mvpBuffer);
-      renderContext_->submit(cmdBuffer);
+        ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
+        cmdBuffer.copyBuffer(mvpBufferStaging, &mvpData, sizeof(MVPMatrices));
+        cmdBuffer.copyBuffer(lightParameterBufferStaging, &scene.lightParameter.color, sizeof(LightParameters));
+        cmdBuffer.cmdCopyBufferToBuffer(mvpBufferStaging, mvpBuffer);
+        cmdBuffer.cmdCopyBufferToBuffer(lightParameterBufferStaging, lightParameterBuffer);
+        renderContext_->submit(cmdBuffer);
     }
 
     void Renderer::windowResize(uint32_t width, uint32_t height)
@@ -333,15 +362,15 @@ namespace Gaia
 
     void Renderer::render(Scene& scene)
     {
-       TextureHandle swapchainImageHandle = renderContext_->getCurrentSwapChainTexture();
+       //TextureHandle swapchainImageHandle = renderContext_->getCurrentSwapChainTexture();
        ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
-       cmdBuffer.cmdTransitionImageLayout(swapchainImageHandle, ImageLayout_COLOR_ATTACHMENT_OPTIMAL);
+       cmdBuffer.cmdTransitionImageLayout(renderTarget_, ImageLayout_COLOR_ATTACHMENT_OPTIMAL);
        cmdBuffer.cmdTransitionImageLayout(depthAttachment, ImageLayout_DEPTH_ATTACHMENT_OPTIMAL);
        ClearValue clearVal = {
         .colorValue = {0.3,0.3,0.3,1.0},
         .depthClearValue = 1.0,
        };
-       cmdBuffer.cmdBeginRendering(swapchainImageHandle, depthAttachment, &clearVal);
+       cmdBuffer.cmdBeginRendering(renderTarget_, depthAttachment, &clearVal);
        cmdBuffer.cmdBindGraphicsPipeline(renderPipeline);
        std::pair<uint32_t, uint32_t> windowDimensions = renderContext_->getWindowSize();
        cmdBuffer.cmdSetViewport(Viewport{
@@ -362,7 +391,7 @@ namespace Gaia
            cmdBuffer.cmdDrawIndexed(numIndicesPerMesh[i], 1, 0, 0, 0);
        }
        cmdBuffer.cmdEndRendering();
-       renderContext_->submit(cmdBuffer, swapchainImageHandle);
+       renderContext_->submit(cmdBuffer);
     }
 
 }

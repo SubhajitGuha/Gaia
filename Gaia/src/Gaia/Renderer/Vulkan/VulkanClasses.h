@@ -195,7 +195,8 @@ namespace Gaia {
 		VkSurfaceFormatKHR getSurfaceFormat() const;
 		uint32_t getNumSwapchainImages();
 	public:
-		static const VkFormat SWAP_CHAIN_FORMAT = VK_FORMAT_R8G8B8A8_SRGB;
+		static const Format SWAP_CHAIN_FORMAT = Format_RGBA_SRGB8;
+		//static const ColorSpace = ColorSpace_SRGB_NONLINEAR;
 		VulkanContext& ctx_;
 		VkDevice vkDevice_ = VK_NULL_HANDLE;
 		VkQueue vkGraphicsQueue_ = VK_NULL_HANDLE;
@@ -346,6 +347,7 @@ namespace Gaia {
 
 		void cmdCopyBufferToBuffer(BufferHandle srcBufferHandle, BufferHandle dstBufferHandle, uint32_t offset = 0) override;
 		void cmdCopyBufferToImage(BufferHandle buffer, TextureHandle texture) override;
+		void cmdCopyImageToImage(TextureHandle srcImageHandle, TextureHandle dstImageHandle) override;
 
 		void cmdSetViewport(Viewport viewport) override;
 		void cmdSetScissor(Scissor scissor) override;
@@ -359,6 +361,9 @@ namespace Gaia {
 		void cmdDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override;
 		void cmdDrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, uint32_t vertexOffset, uint32_t firstInstance) override;
 
+		VkCommandBuffer getVkCommandBuffer() {
+			return commandBufferWraper_->cmdBuffer_;
+		}
 		operator VkCommandBuffer () const {
 			if (commandBufferWraper_ == nullptr)
 			{

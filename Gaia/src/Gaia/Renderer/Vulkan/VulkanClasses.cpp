@@ -106,6 +106,7 @@ namespace Gaia {
 			require_api_version(1, 3, 0).
 			enable_validation_layers(enableValidationLayers_).
 			use_default_debug_messenger().
+			set_headless(window == nullptr).
 			build();
 
 		if (!instance_res)
@@ -116,10 +117,13 @@ namespace Gaia {
 		vkDebugUtilsMessenger_ = vkb_instance.debug_messenger;
 
 		//Create Surface
-		GLFWwindow* glfwWindow = (GLFWwindow*)window;
-		auto res = glfwCreateWindowSurface(vkInstance_, glfwWindow, nullptr, &vkSurface_);
-		
-		GAIA_ASSERT(res == VK_SUCCESS, "failed to create window surface with error code: {}", res)
+		GLFWwindow* glfwWindow = nullptr;
+		if (window)
+		{
+			glfwWindow = (GLFWwindow*)window;
+			auto res = glfwCreateWindowSurface(vkInstance_, glfwWindow, nullptr, &vkSurface_);
+			GAIA_ASSERT(res == VK_SUCCESS, "failed to create window surface with error code: {}", res)
+		}
 		
 
 		//select physical device
@@ -195,10 +199,12 @@ namespace Gaia {
 
 		vmaCreateAllocator(&allocatorCreateInfo, &vmaAllocator_);
 
-		//to do swapchain
-		glfwGetWindowSize(glfwWindow, &window_width, &window_height);
-		swapchain_ = std::make_unique<VulkanSwapchain>(*this, window_width, window_height);
 		immediateCommands_ = std::make_unique<VulkanImmediateCommands>(vkDevice_, deviceQueues_.graphicsQueueFamilyIndex);
+		if (window)
+		{
+			glfwGetWindowSize(glfwWindow, &window_width, &window_height);
+			swapchain_ = std::make_unique<VulkanSwapchain>(*this, window_width, window_height);
+		}
 	}
 	VulkanContext::~VulkanContext()
 	{
@@ -345,7 +351,7 @@ namespace Gaia {
 	Holder<TextureHandle> VulkanContext::createTexture(TextureDesc& desc, const char* debugName)
 	{
 		VkFormat imageFormat = getVkFormatFromFormat(desc.format);
-		VkImageUsageFlags usageFlags = desc.storage == StorageType_Device ? VK_IMAGE_USAGE_TRANSFER_DST_BIT : 0;
+		VkImageUsageFlags usageFlags = desc.storage == StorageType_Device ? VK_IMAGE_USAGE_TRANSFER_DST_BIT| VK_IMAGE_USAGE_TRANSFER_SRC_BIT : 0;
 
 		if (desc.usage & TextureUsageBits_Storage)
 		{
@@ -755,7 +761,7 @@ namespace Gaia {
 	}
 	Format VulkanContext::getSwapChainTextureFormat() const
 	{
-		return Format();
+		return swapchain_->SWAP_CHAIN_FORMAT;
 	}
 	ColorSpace VulkanContext::getSwapChainColorSpace() const
 	{
@@ -1166,7 +1172,7 @@ namespace Gaia {
 	{
 		vkb::SwapchainBuilder swapchainBuilder(ctx.getPhysicalDevice(), ctx.getDevice(), ctx.vkSurface_);
 
-		VkSurfaceFormatKHR surfaceFormat{ .format = SWAP_CHAIN_FORMAT, .colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR };
+		VkSurfaceFormatKHR surfaceFormat{ .format = getVkFormatFromFormat(SWAP_CHAIN_FORMAT), .colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR};
 		
 		surfaceFormat_ = surfaceFormat;
 		vkb::Swapchain vkbSwapchain = swapchainBuilder
@@ -2208,6 +2214,30 @@ namespace Gaia {
 		};
 
 		vkCmdCopyBufferToImage(commandBufferWraper_->cmdBuffer_, buffer->vkBuffer_, image->vkImage_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferImageCopy);
+	}
+	void VulkanCommandBuffer::cmdCopyImageToImage(TextureHandle srcImageHandle, TextureHandle dstImageHandle)
+	{
+		VulkanImage* srcImage = ctx_->texturesPool_.get(srcImageHandle);
+		VulkanImage* dstImage = ctx_->texturesPool_.get(dstImageHandle);
+
+		VkImageCopy imageCopy{
+			.srcSubresource = VkImageSubresourceLayers{
+				.aspectMask = srcImage->getImageAspectFlags(),
+				.mipLevel=0,
+				.baseArrayLayer =0,
+				.layerCount =1,
+			},
+			.srcOffset = {0,0,0},
+			.dstSubresource = VkImageSubresourceLayers{
+				.aspectMask = dstImage->getImageAspectFlags(),
+				.mipLevel = 0,
+				.baseArrayLayer = 0,
+				.layerCount = 1,
+			},
+			.dstOffset = {0,0,0},
+			.extent = srcImage->vkExtent_,
+		};
+		vkCmdCopyImage(commandBufferWraper_->cmdBuffer_, srcImage->vkImage_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dstImage->vkImage_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &imageCopy);
 	}
 	void VulkanCommandBuffer::cmdSetViewport(Viewport viewport)
 	{

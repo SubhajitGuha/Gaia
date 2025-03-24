@@ -649,6 +649,7 @@ namespace Gaia
 
 		virtual void cmdCopyBufferToBuffer(BufferHandle srcBufferHandle, BufferHandle dstBufferHandle, uint32_t offset = 0) = 0;
 		virtual void cmdCopyBufferToImage(BufferHandle buffer, TextureHandle texture) = 0;
+		virtual void cmdCopyImageToImage(TextureHandle srcImageHandle, TextureHandle dstImageHandle) = 0;
 
 		virtual void cmdSetViewport(Viewport viewport) = 0;
 		virtual void cmdSetScissor(Scissor scissor) = 0;

@@ -7,6 +7,7 @@
 #include "ImGui/ImGuiLayer.h"
 #include "glm/glm.hpp"
 #include "Gaia/TimeSteps.h"
+#include "Gaia/Renderer/GaiaRenderer.h"
 
 namespace Gaia {
 	//class Renderer;
@@ -29,13 +30,14 @@ namespace Gaia {
 		static inline Application& Get() { return *getApplication; }
 
 		inline ImGuiLayer* GetImGuiLayer() { return m_ImGuiLayer; }
+		void setImGuiRenderingContext(IContext& context, TextureHandle renderTexture); 
 	public:
 		static TimeStep deltaTime;
 		glm::vec3 v3;
 		float v = 0;
 		float r = 0;
 	private:
-		ImGuiLayer* m_ImGuiLayer;
+		ImGuiLayer* m_ImGuiLayer = nullptr;
 		ref<Window> m_window;
 		//ref<Renderer> renderer;
 		bool m_Running = true;
