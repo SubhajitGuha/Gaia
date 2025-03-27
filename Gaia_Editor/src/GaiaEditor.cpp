@@ -8,7 +8,7 @@ GaiaEditor::GaiaEditor()
 {
 	Window& window = Application::Get().GetWindow();
 	scene_ = Gaia::Scene::create(SceneDescriptor{
-		.meshPath = "C:/Users/Subhajit/OneDrive/Documents/sponza.gltf",
+		.meshPath = "C:/Users/Subhajit/OneDrive/Documents/bistro_ext.gltf",
 		.windowWidth = window.GetWidth(),
 		.windowHeight = window.GetHeight() 
 		});

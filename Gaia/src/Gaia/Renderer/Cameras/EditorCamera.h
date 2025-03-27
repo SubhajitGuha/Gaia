@@ -53,7 +53,7 @@ namespace Gaia {
 		glm::vec3 Up = { 0,1,0 } , RightVector;//we get right vector by getting the cross product of m_ViewDirection and Up vectors
 
 		float m_verticalFOV = 45.f;
-		float m_PerspectiveNear = 0.001;
+		float m_PerspectiveNear = 1.0;
 		float m_PerspectiveFar = 1000;
 		
 		float m_AspectRatio = 1.0;
