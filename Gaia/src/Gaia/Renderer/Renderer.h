@@ -37,7 +37,7 @@ namespace Gaia
 	private:
 
 		std::unique_ptr<IContext> renderContext_;
-		std::vector<uint32_t> numIndicesPerMesh;
+		uint32_t numIndicesPerMesh;
 
 		//render the entire scene into this texture
 		Holder<TextureHandle> renderTarget_;
@@ -53,8 +53,8 @@ namespace Gaia
 		Holder<BufferHandle> lightMatricesBuffer;
 		Holder<BufferHandle> lightMatricesBufferStaging;
 
-		std::vector<Holder<BufferHandle>> vertexBuffer;
-		std::vector<Holder<BufferHandle>> indexBuffer;
+		Holder<BufferHandle> vertexBuffer;
+		Holder<BufferHandle> indexBuffer;
 		Holder<TextureHandle> depthAttachment;
 		std::vector<Holder<TextureHandle>> glTfTextures;
 		Holder<BufferHandle> materialsBuffer;

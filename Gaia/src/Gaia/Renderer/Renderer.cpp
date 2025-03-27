@@ -342,55 +342,59 @@ namespace Gaia
     void Renderer::createStaticBuffers(Scene& scene) 
     {
         LoadMesh& mesh = scene.getMesh();
-        vertexBuffer.resize(mesh.m_subMeshes.size());
-        indexBuffer.resize(mesh.m_subMeshes.size());
 
+        std::vector<LoadMesh::VertexAttributes> buffer;
+        std::vector<uint32_t> indicesBuffer;
+
+        int totalIndices = 0;
         for (int k = 0; k < mesh.m_subMeshes.size(); k++)
         {
             SubMesh& subMesh = mesh.m_subMeshes[k];
-            std::vector<LoadMesh::VertexAttributes> buffer(mesh.m_subMeshes[k].Vertices.size());
             for (int i = 0; i < subMesh.Vertices.size(); i++)
             {
                 glm::vec3 transformed_normals = (subMesh.Normal[i]);//re-orienting the normals (do not include translation as normals only needs to be orinted)
                 glm::vec3 transformed_tangents = (subMesh.Tangent[i]);
                 glm::vec3 transformed_binormals = (subMesh.BiTangent[i]);
-                buffer[i] = (LoadMesh::VertexAttributes(glm::vec4(subMesh.Vertices[i], 1.0), subMesh.TexCoord[i], transformed_normals, transformed_tangents,subMesh.m_MaterialID[i], subMesh.meshIndices[i]));
+                buffer.push_back(LoadMesh::VertexAttributes(glm::vec4(subMesh.Vertices[i], 1.0), subMesh.TexCoord[i], transformed_normals, transformed_tangents,subMesh.m_MaterialID[i], subMesh.meshIndices[i]));
             }
-
-            BufferDesc vertexBufferDesc{
-                .usage_type = BufferUsageBits_Vertex,
-                .storage_type = StorageType_Device,
-                .size = buffer.size() * sizeof(LoadMesh::VertexAttributes),
-            };
-            vertexBuffer[k] = renderContext_->createBuffer(vertexBufferDesc);
-
-            BufferDesc indexBufferDesc
-            {
-                .usage_type = BufferUsageBits_Index,
-                .storage_type = StorageType_Device,
-                .size = mesh.m_subMeshes[k].indices.size() * sizeof(uint32_t),
-            };
-            indexBuffer[k] = renderContext_->createBuffer(indexBufferDesc);
-
-            //create temporary staging buffers
-            vertexBufferDesc.storage_type = StorageType_HostVisible;
-            Holder<BufferHandle> vertexBufferStaging = renderContext_->createBuffer(vertexBufferDesc);
-
-            indexBufferDesc.storage_type = StorageType_HostVisible;
-            Holder<BufferHandle> indexbufferStaging = renderContext_->createBuffer(indexBufferDesc);
-
-            numIndicesPerMesh.push_back(mesh.m_subMeshes[k].indices.size());
-
-            //copy the staging buffers to device visible buffers
-            {
-                ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
-                cmdBuffer.copyBuffer(vertexBufferStaging, buffer.data(), vertexBufferDesc.size);
-                cmdBuffer.copyBuffer(indexbufferStaging, mesh.m_subMeshes[k].indices.data(), indexBufferDesc.size);
-                cmdBuffer.cmdCopyBufferToBuffer(vertexBufferStaging, vertexBuffer[k]);
-                cmdBuffer.cmdCopyBufferToBuffer(indexbufferStaging, indexBuffer[k]);
-                renderContext_->submit(cmdBuffer);
+            for (int i = 0; i < subMesh.indices.size(); i++)
+            {  
+                indicesBuffer.push_back(subMesh.indices[i] + totalIndices); //offset the indices
             }
+            totalIndices += subMesh.Vertices.size();
+        }
+        BufferDesc vertexBufferDesc{
+            .usage_type = BufferUsageBits_Vertex,
+            .storage_type = StorageType_Device,
+            .size = buffer.size() * sizeof(LoadMesh::VertexAttributes),
+        };
+        vertexBuffer = renderContext_->createBuffer(vertexBufferDesc);
 
+        BufferDesc indexBufferDesc
+        {
+            .usage_type = BufferUsageBits_Index,
+            .storage_type = StorageType_Device,
+            .size = indicesBuffer.size() * sizeof(uint32_t),
+        };
+        indexBuffer = renderContext_->createBuffer(indexBufferDesc);
+
+        //create temporary staging buffers
+        vertexBufferDesc.storage_type = StorageType_HostVisible;
+        Holder<BufferHandle> vertexBufferStaging = renderContext_->createBuffer(vertexBufferDesc);
+
+        indexBufferDesc.storage_type = StorageType_HostVisible;
+        Holder<BufferHandle> indexbufferStaging = renderContext_->createBuffer(indexBufferDesc);
+
+        numIndicesPerMesh = indicesBuffer.size();
+
+        //copy the staging buffers to device visible buffers
+        {
+            ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
+            cmdBuffer.copyBuffer(vertexBufferStaging, buffer.data(), vertexBufferDesc.size);
+            cmdBuffer.copyBuffer(indexbufferStaging, indicesBuffer.data(), indexBufferDesc.size);
+            cmdBuffer.cmdCopyBufferToBuffer(vertexBufferStaging, vertexBuffer);
+            cmdBuffer.cmdCopyBufferToBuffer(indexbufferStaging, indexBuffer);
+            renderContext_->submit(cmdBuffer);
         }
 
         mesh.clear();
@@ -448,12 +452,12 @@ namespace Gaia
            .height = windowDimensions.second,
            });
        cmdBuffer.cmdBindGraphicsDescriptorSets(0, renderPipeline, {mvpMatrixDescriptorSetLayout, meshDescriptorSet, shadowDescSetLayout});
-       for (int i = 0; i < vertexBuffer.size(); i++)
+        //draw the batched mesh
        {
-           cmdBuffer.cmdBindVertexBuffer(0, vertexBuffer[i], 0);
-           cmdBuffer.cmdBindIndexBuffer(indexBuffer[i], IndexFormat_U32, 0);
+           cmdBuffer.cmdBindVertexBuffer(0, vertexBuffer, 0);
+           cmdBuffer.cmdBindIndexBuffer(indexBuffer, IndexFormat_U32, 0);
 
-           cmdBuffer.cmdDrawIndexed(numIndicesPerMesh[i], 1, 0, 0, 0);
+           cmdBuffer.cmdDrawIndexed(numIndicesPerMesh, 1, 0, 0, 0);
        }
        cmdBuffer.cmdEndRendering();
        renderContext_->submit(cmdBuffer);

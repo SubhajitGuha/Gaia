@@ -67,7 +67,7 @@ namespace Gaia {
 			.smVertex = vertexShader_,
 			.smFragment = fragmentShader_,
 			.depthFormat = Format_Z_F32,
-			.cullMode = CullMode_Back,
+			.cullMode = CullMode_None,
 			.windingMode = WindingMode_CCW,
 			.polygonMode = PolygonMode_Fill,
 		};
@@ -131,12 +131,12 @@ namespace Gaia {
 				.height = shadowmapResolutions_[k],
 				});
 			cmdBuffer.cmdBindGraphicsDescriptorSets(0, shadowRenderPipeline_, { renderer_->mvpMatrixDescriptorSetLayout, renderer_->meshDescriptorSet, shadowDescSetLayout_ });
-			for (int i = 0; i < renderer_->vertexBuffer.size(); i++)
+			//draw the batched mesh
 			{
-				cmdBuffer.cmdBindVertexBuffer(0, renderer_->vertexBuffer[i], 0);
-				cmdBuffer.cmdBindIndexBuffer(renderer_->indexBuffer[i], IndexFormat_U32, 0);
+				cmdBuffer.cmdBindVertexBuffer(0, renderer_->vertexBuffer, 0);
+				cmdBuffer.cmdBindIndexBuffer(renderer_->indexBuffer, IndexFormat_U32, 0);
 
-				cmdBuffer.cmdDrawIndexed(renderer_->numIndicesPerMesh[i], 1, 0, 0, 0);
+				cmdBuffer.cmdDrawIndexed(renderer_->numIndicesPerMesh, 1, 0, 0, 0);
 			}
 			cmdBuffer.cmdEndRendering();
 			cmdBuffer.cmdTransitionImageLayout(shadowCascadeTextures_[k], ImageLayout_DEPTH_READ_ONLY_OPTIMAL);

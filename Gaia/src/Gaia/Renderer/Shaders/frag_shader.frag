@@ -151,6 +151,28 @@ const mat4 biasMat = mat4(
 	0.5, 0.5, 0.0, 1.0 
 );
 
+float textureProject(vec2 offset, int cascadeIndex)
+{
+	mat4 lightProj = lightMatrixBuffer.lightMatrices[cascadeIndex].lightProjection;
+	mat4 lightView = lightMatrixBuffer.lightMatrices[cascadeIndex].lightView;
+
+	//convert to light space
+
+	vec4 c = biasMat * lightProj * lightView * vec4(vertexPosition.xyz, 1.0); //directional light no model matrix is required
+	c /= c.w;
+	float shadow = 1.0;
+	float bias = 0.001;
+
+	if(c.z > -1.0 && c.z < 1.0)
+	{
+		float depth = texture(shdowTextures[cascadeIndex], c.xy).r;
+		if (c.w > 0.0 && c.z - bias > depth)
+			return 0.2;	
+	}
+
+	return shadow;
+}
+
 float calculateShadow()
 {
 	vec4 vs = cameraBuffer.view * vec4(vertexPosition.xyz, 1.0);
@@ -167,24 +189,24 @@ float calculateShadow()
 		}
 	}
 
-	mat4 lightProj = lightMatrixBuffer.lightMatrices[index].lightProjection;
-	mat4 lightView = lightMatrixBuffer.lightMatrices[index].lightView;
+	vec2 texDim = textureSize(shdowTextures[index], 0);
+	float scale = 0.75;
+	vec2 texelSize = scale * 1.0/texDim;
 
-	//convert to light space
+	float shadowFactor = 0.0;
+	int count = 0;
+	int blockSize = 1;
 
-	vec4 c = biasMat * lightProj * lightView * vec4(vertexPosition.xyz, 1.0); //directional light no model matrix is required
-	c /= c.w;
-	float shadow = 1.0;
-	float bias = 0.0001;
-
-	if(c.z > -1.0 && c.z < 1.0)
+	for(int i=-blockSize; i<blockSize; i++)
 	{
-		float depth = texture(shdowTextures[index], c.xy).r;
-		if (c.w > 0.0 && c.z - bias > depth)
-			return 0.2;	
+		for(int j=-blockSize;j<blockSize;j++)
+		{
+			shadowFactor += textureProject(vec2(i,j)*texelSize, index);
+			count ++;
+		}
 	}
 
-	return shadow;
+	return shadowFactor/count;
 }
 void main() 
 {
