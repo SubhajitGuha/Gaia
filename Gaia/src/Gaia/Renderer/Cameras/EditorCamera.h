@@ -1,4 +1,7 @@
 #pragma once
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_ENABLE_EXPERIMENTAL
 #include "Camera.h"
 #include "Gaia/Events/ApplicationEvent.h"
 #include "Gaia/Events/KeyEvent.h"
@@ -50,8 +53,8 @@ namespace Gaia {
 		glm::vec3 Up = { 0,1,0 } , RightVector;//we get right vector by getting the cross product of m_ViewDirection and Up vectors
 
 		float m_verticalFOV = 45.f;
-		float m_PerspectiveNear = 0.01;
-		float m_PerspectiveFar = 10000000000;
+		float m_PerspectiveNear = 1.0;
+		float m_PerspectiveFar = 1000;
 		
 		float m_AspectRatio = 1.0;
 		float m_pitch=0, m_yaw=0, m_roll=0;

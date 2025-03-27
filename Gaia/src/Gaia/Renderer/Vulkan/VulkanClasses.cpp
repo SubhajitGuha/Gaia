@@ -129,6 +129,7 @@ namespace Gaia {
 		//select physical device
 		VkPhysicalDeviceFeatures features{};
 		features.samplerAnisotropy = VK_TRUE;
+		features.depthClamp = VK_TRUE;
 
 		VkPhysicalDeviceVulkan13Features features13;
 		features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
@@ -594,6 +595,9 @@ namespace Gaia {
 			case SamplerWrap_Clamp:
 				addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 				break;
+			case SamplerWrap_ClampBorder:
+				addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+				break;
 			case SamplerWrap_Repeat:
 				addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
 				break;
@@ -607,6 +611,9 @@ namespace Gaia {
 		case SamplerWrap_Clamp:
 			addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 			break;
+		case SamplerWrap_ClampBorder:
+			addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+			break;
 		case SamplerWrap_Repeat:
 			addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
 			break;
@@ -619,6 +626,9 @@ namespace Gaia {
 		{
 		case SamplerWrap_Clamp:
 			addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+			break;
+		case SamplerWrap_ClampBorder:
+			addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
 			break;
 		case SamplerWrap_Repeat:
 			addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
@@ -673,6 +683,7 @@ namespace Gaia {
 			.minLod = (float)desc.mipLodMin,
 			.maxLod = (float)desc.mipLodMax,
 		};
+		sci.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
 		vkCreateSampler(vkDevice_, &sci, nullptr, &vulkanSampler.sampler_);
 		SamplerHandle handle = samplerPool_.Create(std::move(vulkanSampler));
 		return {this, handle};
@@ -2147,14 +2158,18 @@ namespace Gaia {
 		VulkanImage* colorImage = ctx_->texturesPool_.get(colorAttachmentHandle);
 		VulkanImage* depthImage = ctx_->texturesPool_.get(depthTextureHandle);
 
-		//TODO give support for resolve operation for msaa textures
-		VkRenderingAttachmentInfo colorAttachmentInfo{
-			.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-			.imageView = colorImage-> imageView_,
-			.imageLayout = colorImage->vkImageLayout_,
-			.loadOp = clearValue? VK_ATTACHMENT_LOAD_OP_CLEAR: VK_ATTACHMENT_LOAD_OP_LOAD,
-			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-		};
+		VkRenderingAttachmentInfo colorAttachmentInfo{};
+		if(colorImage)
+		{
+			colorAttachmentInfo = {
+				.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+				.imageView = colorImage->imageView_,
+				.imageLayout = colorImage->vkImageLayout_,
+				.loadOp = clearValue ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD,
+				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+			};
+		}
+
 		if (clearValue)
 		{
 			colorAttachmentInfo.clearValue = VkClearValue
@@ -2180,13 +2195,29 @@ namespace Gaia {
 			};
 		}
 
+		uint32_t width = 1;
+		uint32_t height = 1;
+
+		if (colorImage)
+		{
+			width = colorImage->vkExtent_.width;
+			height = colorImage->vkExtent_.height;
+		}
+		else if (depthImage)
+		{
+			width = depthImage->vkExtent_.width;
+			height = depthImage->vkExtent_.height;
+		}
+		else {
+			GAIA_ASSERT(true, "both color and depth attachment are null");
+		}
 		//no stencil for now
 		VkRenderingInfo renderingInfo{
 			.sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-			.renderArea = VkRect2D{.offset = {0,0},.extent = {colorImage->vkExtent_.width, colorImage->vkExtent_.height }},
+			.renderArea = VkRect2D{.offset = {0,0},.extent = {width, height }},
 			.layerCount = 1,
-			.colorAttachmentCount = 1, //need to change this , need to pass an array of color texture handles
-			.pColorAttachments = &colorAttachmentInfo,
+			.colorAttachmentCount = colorImage? 1u:0u, //need to change this , need to pass an array of color texture handles
+			.pColorAttachments = colorImage? &colorAttachmentInfo: VK_NULL_HANDLE,
 			.pDepthAttachment = depthImage? &depthAttachmentInfo: VK_NULL_HANDLE,
 		};
 		vkCmdBeginRendering(commandBufferWraper_->cmdBuffer_, &renderingInfo);

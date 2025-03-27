@@ -143,6 +143,7 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="src\Gaia\Renderer\Shadows.h" />
     <ClInclude Include="src\Gaia\Material.h" />
     <ClInclude Include="src\Gaia\Scene\Scene.h" />
     <ClInclude Include="src\Gaia\Application.h" />
@@ -470,6 +471,7 @@
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VulkanClasses.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\Gaia\Renderer\Shadows.cpp" />
     <ClCompile Include="src\Gaia\Material.cpp" />
     <ClCompile Include="src\Gaia\Scene\Scene.cpp" />
     <ClCompile Include="src\Gaia\Application.cpp" />
@@ -510,6 +512,8 @@
     <None Include="src\Gaia\Renderer\Shaders\compile.bat" />
     <None Include="src\Gaia\Renderer\Shaders\frag_shader.frag" />
     <None Include="src\Gaia\Renderer\Shaders\frag_shader.spv" />
+    <None Include="src\Gaia\Renderer\Shaders\shadow.frag" />
+    <None Include="src\Gaia\Renderer\Shaders\shadow.vert" />
     <None Include="src\Gaia\Renderer\Shaders\vert_shader.spv" />
     <None Include="src\Gaia\Renderer\Shaders\vert_shader.vert" />
   </ItemGroup>

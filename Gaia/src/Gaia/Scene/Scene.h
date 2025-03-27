@@ -55,6 +55,7 @@ namespace Gaia
 		void onEvent(Event& event);
 	public:
 		LightParameters lightParameter{};
+		glm::vec3 LightPosition{ 0.0 , 0.0, 0.0};
 	private:
 		std::unique_ptr<EditorCamera> mainCamera_;
 		std::unique_ptr<LoadMesh> mesh_;

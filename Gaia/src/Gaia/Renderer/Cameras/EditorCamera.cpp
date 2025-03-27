@@ -6,6 +6,8 @@
 #include "Gaia/Input.h"
 #include "Gaia/GaiaCodes.h"
 
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+
 namespace Gaia {
 	float EditorCamera::camera_MovementSpeed = 20;
 	EditorCamera::EditorCamera()

@@ -27,6 +27,8 @@ layout(location = 2) out vec4 vertexPosition;
 layout(location = 3) out vec3 vertexNormal;
 layout(location = 4) out vec3 vertexTangent;
 
+
+
 void main()
 {
 	//output the position of each vertex

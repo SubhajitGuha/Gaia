@@ -18,6 +18,7 @@
 #include <random>
 #include <typeinfo>
 #include <future>
+#include <ranges>
 #include <filesystem>
 
 #ifdef GAIA_PLATFORM_WINDOWS

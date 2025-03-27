@@ -1104,6 +1104,7 @@
     <ClInclude Include="src\Gaia\Renderer\Renderer.h" />
     <ClInclude Include="src\Gaia\Scene\Scene.h" />
     <ClInclude Include="src\Gaia\Material.h" />
+    <ClInclude Include="src\Gaia\Renderer\Shadows.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Gaia\Application.cpp">
@@ -1171,6 +1172,7 @@
     <ClCompile Include="src\Gaia\Renderer\Renderer.cpp" />
     <ClCompile Include="src\Gaia\Scene\Scene.cpp" />
     <ClCompile Include="src\Gaia\Material.cpp" />
+    <ClCompile Include="src\Gaia\Renderer\Shadows.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="src\Gaia\Renderer\Shaders\vert_shader.vert" />
@@ -1178,5 +1180,7 @@
     <None Include="src\Gaia\Renderer\Shaders\frag_shader.frag" />
     <None Include="src\Gaia\Renderer\Shaders\frag_shader.spv" />
     <None Include="src\Gaia\Renderer\Shaders\vert_shader.spv" />
+    <None Include="src\Gaia\Renderer\Shaders\shadow.vert" />
+    <None Include="src\Gaia\Renderer\Shaders\shadow.frag" />
   </ItemGroup>
 </Project>

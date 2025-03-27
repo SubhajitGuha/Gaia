@@ -288,15 +288,16 @@ namespace Gaia
 		fs::path meshPath = m_path;
 
 		fs::path parentPath = meshPath.parent_path();
-
 		size_t numTextures = model.images.size();
-		for (uint32_t imageIndex = 0; imageIndex < numTextures; ++imageIndex)
-		{
-			Texture texture;
-			fs::path imagePath = model.images[imageIndex].uri;
+		gltfTextures.resize(numTextures);
 
-			fs::path absolutePath = parentPath / imagePath;
-			tinygltf::Image& glTFImage = model.images[imageIndex];
+		auto iter = std::views::iota(model.images.begin(), model.images.end());
+		std::for_each(std::execution::par, iter.begin(), iter.end(), [&](auto&& texIterator) {
+			Texture texture;
+			/*fs::path imagePath = model.images[imageIndex].uri;
+
+			fs::path absolutePath = parentPath / imagePath;*/
+			tinygltf::Image& glTFImage = model.images[texIterator - model.images.begin()];
 
 			uint8_t* buffer;
 			uint64_t bufferSize;
@@ -330,65 +331,159 @@ namespace Gaia
 			{
 				texture.textureData[i] = buffer[i];
 			}
-			gltfTextures.push_back(texture);
-		}
+			gltfTextures[texIterator - model.images.begin()] = texture;
+			});
+
+		//for (uint32_t imageIndex = 0; imageIndex < numTextures; ++imageIndex)
+		//{
+		//	Texture texture;
+		//	/*fs::path imagePath = model.images[imageIndex].uri;
+
+		//	fs::path absolutePath = parentPath / imagePath;*/
+		//	tinygltf::Image& glTFImage = model.images[imageIndex];
+
+		//	uint8_t* buffer;
+		//	uint64_t bufferSize;
+		//	texture.width = glTFImage.width;
+		//	texture.height = glTFImage.height;
+		//	texture.num_channels = glTFImage.component;
+
+		//	if (glTFImage.component == 3)
+		//	{
+		//		bufferSize = glTFImage.width * glTFImage.height * 4;
+		//		std::vector<uint8_t> imageData(bufferSize, 0);
+		//		//buffer = new uint8_t[bufferSize]{};
+
+		//		buffer = (uint8_t*)imageData.data();
+		//		uint8_t* rgba = buffer;
+		//		uint8_t* rgb = &glTFImage.image[0];
+		//		for (int j = 0; j < glTFImage.width * glTFImage.height; ++j)
+		//		{
+		//			memcpy(rgba, rgb, sizeof(uint8_t) * 3);
+		//			rgba += 4;
+		//			rgb += 3;
+		//		}
+		//	}
+		//	else
+		//	{
+		//		buffer = &glTFImage.image[0];
+		//		bufferSize = glTFImage.image.size();
+		//	}
+		//	texture.textureData.resize(bufferSize);
+		//	for (int i = 0; i < bufferSize; i++)
+		//	{
+		//		texture.textureData[i] = buffer[i];
+		//	}
+		//	gltfTextures.push_back(texture);
+		//}
 	}
 	void LoadMesh::LoadMatrials()
 	{
 		size_t numMaterials = model.materials.size();
+		pbrMaterials.resize(numMaterials);
 		uint32_t materialIndex = 0u;
-		for (int i = 0; i < numMaterials; i++)
-		{
-			tinygltf::Material glTFMaterial = model.materials[i];
+		auto iter = std::views::iota(model.materials.begin(), model.materials.end());
+		std::for_each(std::execution::par, iter.begin(), iter.end(), [&](auto&& matIterator) {
 			Material material = {};
 			// diffuse color aka base color factor
 			// used as constant color, if no diffuse texture is provided
 			// else, multiplied in the shader with each sample from the diffuse texture
-			if (glTFMaterial.values.find("baseColorFactor") != glTFMaterial.values.end())
+			if ((*matIterator).values.find("baseColorFactor") != (*matIterator).values.end())
 			{
 				material.baseColorFactor =
-					glm::make_vec4(glTFMaterial.values["baseColorFactor"].ColorFactor().data());
+					glm::make_vec4((*matIterator).values["baseColorFactor"].ColorFactor().data());
 			}
 
 			// diffuse map aka basecolor aka albedo
-			if (glTFMaterial.pbrMetallicRoughness.baseColorTexture.index != -1)
+			if ((*matIterator).pbrMetallicRoughness.baseColorTexture.index != -1)
 			{
-				int diffuseTextureIndex = glTFMaterial.pbrMetallicRoughness.baseColorTexture.index;
+				int diffuseTextureIndex = (*matIterator).pbrMetallicRoughness.baseColorTexture.index;
 				tinygltf::Texture& diffuseTexture = model.textures[diffuseTextureIndex];
 				material.baseColorTexture = diffuseTexture.source;
 			}
-			else if (glTFMaterial.values.find("baseColorTexture") != glTFMaterial.values.end())
+			else if ((*matIterator).values.find("baseColorTexture") != (*matIterator).values.end())
 			{
-				int diffuseTextureIndex = glTFMaterial.values["baseColorTexture"].TextureIndex();
+				int diffuseTextureIndex = (*matIterator).values["baseColorTexture"].TextureIndex();
 				tinygltf::Texture& diffuseTexture = model.textures[diffuseTextureIndex];
 				material.baseColorTexture = diffuseTexture.source;
 			}
 
 			// normal map
-			if (glTFMaterial.normalTexture.index != -1)
+			if ((*matIterator).normalTexture.index != -1)
 			{
-				int normalTextureIndex = glTFMaterial.normalTexture.index;
+				int normalTextureIndex = (*matIterator).normalTexture.index;
 				tinygltf::Texture& normalTexture = model.textures[normalTextureIndex];
-				material.normalStrength = glTFMaterial.normalTexture.scale;
+				material.normalStrength = (*matIterator).normalTexture.scale;
 				material.normalTexture = normalTexture.source;
 			}
 
 			// constant values for roughness and metallicness
 			{
-				material.roughnessFactor = glTFMaterial.pbrMetallicRoughness.roughnessFactor;
-				material.metallicFactor = glTFMaterial.pbrMetallicRoughness.metallicFactor;
+				material.roughnessFactor = (*matIterator).pbrMetallicRoughness.roughnessFactor;
+				material.metallicFactor = (*matIterator).pbrMetallicRoughness.metallicFactor;
 			}
 
 			// texture for roughness and metallicness
-			if (glTFMaterial.pbrMetallicRoughness.metallicRoughnessTexture.index != -1)
+			if ((*matIterator).pbrMetallicRoughness.metallicRoughnessTexture.index != -1)
 			{
-				int MetallicRoughnessTextureIndex = glTFMaterial.pbrMetallicRoughness.metallicRoughnessTexture.index;
+				int MetallicRoughnessTextureIndex = (*matIterator).pbrMetallicRoughness.metallicRoughnessTexture.index;
 				tinygltf::Texture& metallicRoughnessTexture = model.textures[MetallicRoughnessTextureIndex];
 				material.metallicRoughnessTexture = metallicRoughnessTexture.source;
 			}
+			pbrMaterials[matIterator - model.materials.begin()] = material;
+			});
+		//for (int i = 0; i < numMaterials; i++)
+		//{
+		//	tinygltf::Material glTFMaterial = model.materials[i];
+		//	Material material = {};
+		//	// diffuse color aka base color factor
+		//	// used as constant color, if no diffuse texture is provided
+		//	// else, multiplied in the shader with each sample from the diffuse texture
+		//	if (glTFMaterial.values.find("baseColorFactor") != glTFMaterial.values.end())
+		//	{
+		//		material.baseColorFactor =
+		//			glm::make_vec4(glTFMaterial.values["baseColorFactor"].ColorFactor().data());
+		//	}
 
-			pbrMaterials.push_back(material);
-		}
+		//	// diffuse map aka basecolor aka albedo
+		//	if (glTFMaterial.pbrMetallicRoughness.baseColorTexture.index != -1)
+		//	{
+		//		int diffuseTextureIndex = glTFMaterial.pbrMetallicRoughness.baseColorTexture.index;
+		//		tinygltf::Texture& diffuseTexture = model.textures[diffuseTextureIndex];
+		//		material.baseColorTexture = diffuseTexture.source;
+		//	}
+		//	else if (glTFMaterial.values.find("baseColorTexture") != glTFMaterial.values.end())
+		//	{
+		//		int diffuseTextureIndex = glTFMaterial.values["baseColorTexture"].TextureIndex();
+		//		tinygltf::Texture& diffuseTexture = model.textures[diffuseTextureIndex];
+		//		material.baseColorTexture = diffuseTexture.source;
+		//	}
+
+		//	// normal map
+		//	if (glTFMaterial.normalTexture.index != -1)
+		//	{
+		//		int normalTextureIndex = glTFMaterial.normalTexture.index;
+		//		tinygltf::Texture& normalTexture = model.textures[normalTextureIndex];
+		//		material.normalStrength = glTFMaterial.normalTexture.scale;
+		//		material.normalTexture = normalTexture.source;
+		//	}
+
+		//	// constant values for roughness and metallicness
+		//	{
+		//		material.roughnessFactor = glTFMaterial.pbrMetallicRoughness.roughnessFactor;
+		//		material.metallicFactor = glTFMaterial.pbrMetallicRoughness.metallicFactor;
+		//	}
+
+		//	// texture for roughness and metallicness
+		//	if (glTFMaterial.pbrMetallicRoughness.metallicRoughnessTexture.index != -1)
+		//	{
+		//		int MetallicRoughnessTextureIndex = glTFMaterial.pbrMetallicRoughness.metallicRoughnessTexture.index;
+		//		tinygltf::Texture& metallicRoughnessTexture = model.textures[MetallicRoughnessTextureIndex];
+		//		material.metallicRoughnessTexture = metallicRoughnessTexture.source;
+		//	}
+
+		//	pbrMaterials.push_back(material);
+		//}
 	}
 	void LoadMesh::LoadTransforms(int nodeIndex, glm::mat4& parentTransform)
 	{

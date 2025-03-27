@@ -1,6 +1,7 @@
 #include "GaiaEditor.h"
 #include "Gaia/Application.h"
 #include "Gaia/Window.h"
+#include "Gaia/Renderer/Shadows.h"
 #include "imgui.h"
 
 GaiaEditor::GaiaEditor()
@@ -37,8 +38,12 @@ void GaiaEditor::OnImGuiRender()
 {
 	ImGui::Begin("Light");
 	ImGui::DragFloat3("Light Direction", &scene_->lightParameter.direction.x,0.1);
+	ImGui::DragFloat3("Light Position", &scene_->LightPosition.x, 0.1);
+
 	ImGui::ColorEdit3("Light Color", &scene_->lightParameter.color.x);
 	ImGui::DragFloat("Light Intensity", &scene_->lightParameter.intensity, 0.1);
+	ImGui::DragFloat("cascade lamda", &Shadows::lamda, 0.001);
+
 	ImGui::End();
 }
 

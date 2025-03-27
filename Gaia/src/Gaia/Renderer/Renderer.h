@@ -5,6 +5,7 @@
 namespace Gaia
 {
 	class Scene;
+	class Shadows;
 	struct MVPMatrices
 	{
 		glm::mat4 view = glm::mat4(1.0);
@@ -17,6 +18,10 @@ namespace Gaia
 
 	class Renderer
 	{
+		friend class Shadows;
+	public:
+		static VertexInput vertexInput;
+
 	public:
 		static std::shared_ptr<Renderer> create(void* window, Scene& scene);
 		
@@ -30,6 +35,7 @@ namespace Gaia
 		explicit Renderer(void* window, Scene& scene);
 		~Renderer();
 	private:
+
 		std::unique_ptr<IContext> renderContext_;
 		std::vector<uint32_t> numIndicesPerMesh;
 
@@ -44,6 +50,8 @@ namespace Gaia
 		Holder<BufferHandle> transformsBuffer;
 		Holder<BufferHandle> lightParameterBuffer;
 		Holder<BufferHandle> lightParameterBufferStaging;
+		Holder<BufferHandle> lightMatricesBuffer;
+		Holder<BufferHandle> lightMatricesBufferStaging;
 
 		std::vector<Holder<BufferHandle>> vertexBuffer;
 		std::vector<Holder<BufferHandle>> indexBuffer;
@@ -51,11 +59,17 @@ namespace Gaia
 		std::vector<Holder<TextureHandle>> glTfTextures;
 		Holder<BufferHandle> materialsBuffer;
 		Holder<SamplerHandle> imageSampler;
+		Holder<SamplerHandle> shadowImageSampler;
+
 
 		Holder<DescriptorSetLayoutHandle> mvpMatrixDescriptorSetLayout;
 		Holder<DescriptorSetLayoutHandle> meshDescriptorSet;
-
+		Holder<DescriptorSetLayoutHandle> shadowDescSetLayout;
+		
 		MVPMatrices mvpData = {};
+
+		//other components
+		std::unique_ptr<Shadows> shadows_;
 	private:
 		void createGpuMeshTexturesAndBuffers(Scene& scene);
 	};

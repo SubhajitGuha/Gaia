@@ -291,7 +291,7 @@ namespace Gaia
 
 	enum SamplerFilter : uint8_t { SamplerFilter_Nearest = 0, SamplerFilter_Linear };
 	enum SamplerMip : uint8_t {SamplerMip_Nearest, SamplerMip_Linear };
-	enum SamplerWrap : uint8_t { SamplerWrap_Repeat = 0, SamplerWrap_Clamp, SamplerWrap_MirrorRepeat };
+	enum SamplerWrap : uint8_t { SamplerWrap_Repeat = 0, SamplerWrap_Clamp, SamplerWrap_ClampBorder, SamplerWrap_MirrorRepeat };
 
 	enum CompareOp : uint8_t {
 		CompareOp_Never = 0,

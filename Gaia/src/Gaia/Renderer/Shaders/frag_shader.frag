@@ -3,10 +3,12 @@
 
 //shader input
 flat layout (location = 0) in uint materialId;
-layout (location = 1) in vec2 texCoord;
+layout(location = 1) in vec2 texCoord;
 layout(location = 2) in vec4 vertexPosition;
 layout(location = 3) in vec3 vertexNormal;
 layout(location = 4) in vec3 vertexTangent;
+
+#define MAX_CASCADES 8
 
 struct Material
 {
@@ -18,6 +20,14 @@ struct Material
 	int baseColorTexture;
 	int metallicRoughnessTexture;
 	int normalTexture;
+};
+
+struct LightMatrices
+{
+	mat4 lightView;
+	mat4 lightProjection;
+	float farRange;
+	int numCascades;
 };
 
 layout(set = 0, binding = 0) uniform Camera
@@ -42,6 +52,12 @@ layout(set = 1, binding = 0) readonly buffer materialLayout
 
 layout(set = 1, binding = 1) uniform sampler2D textures[];
 
+layout(set = 2, binding = 0) uniform LightMatricesLayout
+{
+	LightMatrices lightMatrices[MAX_CASCADES];
+} lightMatrixBuffer;
+
+layout(set = 2, binding = 1) uniform sampler2D shdowTextures[];
 
 //output write
 layout (location = 0) out vec4 outFragColor;
@@ -128,11 +144,57 @@ vec3 DiffuseBRDF(vec3 baseColor, vec3 view, vec3 light)
 	return f_diff;
 }
 
+const mat4 biasMat = mat4( 
+	0.5, 0.0, 0.0, 0.0,
+	0.0, 0.5, 0.0, 0.0,
+	0.0, 0.0, 1.0, 0.0,
+	0.5, 0.5, 0.0, 1.0 
+);
+
+float calculateShadow()
+{
+	vec4 vs = cameraBuffer.view * vec4(vertexPosition.xyz, 1.0);
+
+	float z = vs.z;
+
+	int index = 0;
+	int numCascades = lightMatrixBuffer.lightMatrices[0].numCascades;
+	for (int i=0;i<numCascades - 1; i++)
+	{
+		if(z < lightMatrixBuffer.lightMatrices[i].farRange)
+		{
+			index = i+1;
+		}
+	}
+
+	mat4 lightProj = lightMatrixBuffer.lightMatrices[index].lightProjection;
+	mat4 lightView = lightMatrixBuffer.lightMatrices[index].lightView;
+
+	//convert to light space
+
+	vec4 c = biasMat * lightProj * lightView * vec4(vertexPosition.xyz, 1.0); //directional light no model matrix is required
+	c /= c.w;
+	float shadow = 1.0;
+	float bias = 0.0001;
+
+	if(c.z > -1.0 && c.z < 1.0)
+	{
+		float depth = texture(shdowTextures[index], c.xy).r;
+		if (c.w > 0.0 && c.z - bias > depth)
+			return 0.2;	
+	}
+
+	return shadow;
+}
 void main() 
 {
 	Material mat = materialBuffer.materials[materialId];
 
 	vec4 albedo = mat.baseColorTexture!=-1? texture(textures[mat.baseColorTexture], texCoord): vec4(mat.baseColorFactor);
+	if (albedo.a < 0.02)
+	{
+		discard;
+	}
 	vec4 matRoughness = mat.metallicRoughnessTexture!=-1?texture(textures[mat.metallicRoughnessTexture], texCoord):vec4(1.0);
 	roughness = matRoughness.g * mat.roughnessFactor;
 	metallic = matRoughness.b * mat.metallicFactor;
@@ -147,14 +209,16 @@ void main()
 	F0 = vec3(0.04);
 	F0 = mix(F0, albedo.xyz, metallic);
 
+	float shadow = calculateShadow();
+
 	float vdoth = max(dot(EyeDirection, normalize(DirectionalLight_Direction + EyeDirection)),0.0);
 	ks = Fresnel(vdoth);
 	kd = vec3(1.0) - ks;
 	kd *= (1.0 - metallic);
-	PBR_Color += ( (kd * DiffuseBRDF(albedo.rgb, EyeDirection, DirectionalLight_Direction)) + SpecularBRDF(DirectionalLight_Direction , EyeDirection , vertexNormal) ) * (1.0 * lightParameters.color * lightParameters.intensity) * max(dot(vertexNormal,DirectionalLight_Direction), 0.001) ; //for directional light (no attenuation)
+	PBR_Color += ( (kd * DiffuseBRDF(albedo.rgb, EyeDirection, DirectionalLight_Direction)) + SpecularBRDF(DirectionalLight_Direction , EyeDirection , vertexNormal) ) * (shadow * lightParameters.color * lightParameters.intensity) * max(dot(vertexNormal,DirectionalLight_Direction), 0.001) ; //for directional light (no attenuation)
 	vec3 ambiant = vec3(0.02);
 	PBR_Color += ambiant;
 	//PBR_Color = pow(PBR_Color, vec3(1.0/2.2));
 	PBR_Color = ACESFilm(PBR_Color);
-	outFragColor = vec4(PBR_Color,1.0f);
+	outFragColor = vec4(PBR_Color.rgb,1.0f);
 }

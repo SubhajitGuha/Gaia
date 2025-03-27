@@ -6,6 +6,8 @@
 #include"Layer.h"
 //#include "Gaia/Renderer/Renderer.h"
 
+//#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+
 #define HZ_BIND_FN(x) std::bind(&Application::x,this,std::placeholders::_1)
 /*
 std::bind returns a function pointer that can be used as an argument in SetCallBackEvent(), also we are using std::bind
