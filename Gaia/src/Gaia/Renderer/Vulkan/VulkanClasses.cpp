@@ -130,7 +130,8 @@ namespace Gaia {
 		VkPhysicalDeviceFeatures features{};
 		features.samplerAnisotropy = VK_TRUE;
 		features.depthClamp = VK_TRUE;
-
+		features.shaderInt64 = VK_TRUE;
+		
 		VkPhysicalDeviceVulkan13Features features13;
 		features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
 		features13.synchronization2 = true;
@@ -140,7 +141,7 @@ namespace Gaia {
 		features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
 		features12.bufferDeviceAddress = true;
 		features12.descriptorIndexing = true;
-
+		
 		std::vector<const char*> extensions{
 			VK_KHR_RAY_QUERY_EXTENSION_NAME,
 			VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
@@ -346,6 +347,11 @@ namespace Gaia {
 			vmaMapMemory(getVmaAllocator(), buffer.vmaAllocation_, &buffer.mappedPtr_);
 		}
 
+		VkBufferDeviceAddressInfo bd_ai{
+			.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+			.buffer = buffer.vkBuffer_,
+		};
+		buffer.deviceAddress_ =  vkGetBufferDeviceAddress(vkDevice_, &bd_ai);
 		BufferHandle bufferHandle = bufferPool_.Create(std::move(buffer));
 		return {this,bufferHandle};
 	}
@@ -688,6 +694,27 @@ namespace Gaia {
 		SamplerHandle handle = samplerPool_.Create(std::move(vulkanSampler));
 		return {this, handle};
 	}
+	Holder<AccelStructHandle> VulkanContext::createAccelerationStructure(AccelStructDesc& desc)
+	{
+		AccelStructHandle accHandle;
+		if (desc.type == AccelStructType_Invalid)
+		{
+			GAIA_ASSERT(false, "select a valid Acceleration structure type");
+		}
+		if (desc.type == AccelStructType_BLAS)
+		{
+			accHandle = BuildBLAS(desc);
+		}
+		if (desc.type == AccelStructType_TLAS)
+		{
+			accHandle = BuildTLAS(desc);
+		}
+		return {this, accHandle};
+	}
+	Holder<RayTracingPipelineHandle> VulkanContext::createRayTracingPipeline(const RayTracingPipelineDesc& desc)
+	{
+		return Holder<RayTracingPipelineHandle>();
+	}
 	void VulkanContext::destroy(BufferHandle handle)
 	{
 		VulkanBuffer* buffer = bufferPool_.get(handle);
@@ -766,6 +793,28 @@ namespace Gaia {
 		samplerPool_.Destroy(handle);
 	}
 
+	void VulkanContext::destroy(AccelStructHandle handle)
+	{
+		VulkanAccelerationStructure* accelStructure = accelStructurePool_.get(handle);
+		deferredTask(std::packaged_task<void()>([device = vkDevice_, as = accelStructure->vkAccelStructure]() {
+			vkDestroyAccelerationStructureKHR(device, as, nullptr);
+			}));
+		accelStructurePool_.Destroy(handle);
+	}
+
+	void VulkanContext::destroy(RayTracingPipelineHandle handle)
+	{
+		RayTracingPipelineState* rtps = rayTracingPipelinePool_.get(handle);
+
+		deferredTask(std::packaged_task<void()>([device = vkDevice_, pl = rtps->pipelineLayout_]() {
+			vkDestroyPipelineLayout(device, pl, nullptr);
+			}));
+		deferredTask(std::packaged_task<void()>([device = vkDevice_, pipeline = rtps->pipeline_]() {
+			vkDestroyPipeline(device, pipeline, nullptr);
+			}));
+		rayTracingPipelinePool_.Destroy(handle);
+	}
+
 	TextureHandle VulkanContext::getCurrentSwapChainTexture()
 	{
 		return swapchain_->getCurrentTexture();
@@ -785,6 +834,16 @@ namespace Gaia {
 	void VulkanContext::recreateSwapchain(int newWidth, int newHeight)
 	{
 		swapchain_ = std::make_unique<VulkanSwapchain>(*this, newWidth, newHeight);
+	}
+	uint64_t VulkanContext::gpuAddress(BufferHandle handle, size_t offset)
+	{
+		//GAIA_ASSERT((offset & 7) == 0, "Buffer offset must be 8 bytes aligned as per GLSL_EXT_buffer_reference spec.");
+
+		VulkanBuffer* buf = bufferPool_.get(handle);
+
+		GAIA_ASSERT(buf && buf->deviceAddress_,"");
+
+		return buf ? (uint64_t)buf->deviceAddress_ + offset : 0u;
 	}
 	VulkanDescriptorSet* VulkanContext::getDescriptorSet(DescriptorSetLayoutHandle handle)
 	{
@@ -865,7 +924,7 @@ namespace Gaia {
 			}
 			colorFormats[i] = getVkFormatFromFormat(colorAttachment.format);
 		}
-		//createing a simple pipeline layout without any push constant or Descriptor sets
+		//createing a simple pipeline layout without any push constant
 		std::vector<VkDescriptorSetLayout> descSetLayouts;
 		uint32_t numLayouts = rps->desc_.getNumDescriptorSetLayouts();
 		for (int i = 0; i < numLayouts; i++)
@@ -927,6 +986,445 @@ namespace Gaia {
 		GAIA_ASSERT(pipelineBuilder->build(vkDevice_, VK_NULL_HANDLE, rps->pipelineLayout_, &rps->pipeline_) == VK_SUCCESS, "error");
 
 		return rps->pipeline_;
+	}
+	VkPipeline VulkanContext::getPipeline(RayTracingPipelineHandle handle)
+	{
+		RayTracingPipelineState* rtps = rayTracingPipelinePool_.get(handle);
+
+		if (!rtps)
+		{
+			return VK_NULL_HANDLE;
+		}
+
+		if (rtps->pipeline_)
+		{
+			return rtps->pipeline_;
+		}
+		//createing a simple pipeline layout without any push constant
+		std::vector<VkDescriptorSetLayout> descSetLayouts;
+		uint32_t numLayouts = rtps->desc_.getNumDescriptorSetLayouts();
+		for (int i = 0; i < numLayouts; i++)
+		{
+			VulkanDescriptorSet* descSet = descriptorSetPool_.get(rtps->desc_.descriptorSetLayout[i]);
+			if (descSet)
+				descSetLayouts.push_back(descSet->layout_.descSetLayout);
+		}
+
+		RayTracingPipelineDesc& desc = rtps->desc_;
+
+		ShaderModuleState* mRgen = shaderModulePool_.get(desc.smRayGen);
+		ShaderModuleState* mAHit = shaderModulePool_.get(desc.smAnyHit);
+		ShaderModuleState* mCHit = shaderModulePool_.get(desc.smClosestHit);
+		ShaderModuleState* mMiss = shaderModulePool_.get(desc.smMiss);
+		ShaderModuleState* mInter = shaderModulePool_.get(desc.smIntersection);
+		ShaderModuleState* mCall = shaderModulePool_.get(desc.smCallable);
+
+		GAIA_ASSERT(mRgen != nullptr, "");
+
+		VkPipelineLayoutCreateInfo plci{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+			.flags = 0,
+			.setLayoutCount = static_cast<uint32_t>(descSetLayouts.size()),
+			.pSetLayouts = descSetLayouts.data(),
+		};
+		VkResult res = vkCreatePipelineLayout(vkDevice_, &plci, nullptr, &rtps->pipelineLayout_);
+
+		GAIA_ASSERT(res == VK_SUCCESS, "error code = ", res);
+
+		const uint32_t maxRtShaderStages = 6;
+		VkPipelineShaderStageCreateInfo ciShaderStages[maxRtShaderStages];
+		uint32_t numShaderStages = 0;
+#define ADD_STAGE(shaderModuleState, vkShaderStage) \
+if(shaderModuleState)\
+	ciShaderStages[numShaderStages++] = vkutil::getPipelineShaderStageCreateInfo(vkShaderStage, shaderModuleState->sm, "main", nullptr);
+
+		ADD_STAGE(mRgen, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+		ADD_STAGE(mMiss, VK_SHADER_STAGE_MISS_BIT_KHR);
+		ADD_STAGE(mCHit, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+		ADD_STAGE(mAHit, VK_SHADER_STAGE_ANY_HIT_BIT_KHR);
+		ADD_STAGE(mInter, VK_SHADER_STAGE_INTERSECTION_BIT_KHR);
+		ADD_STAGE(mCall, VK_SHADER_STAGE_CALLABLE_BIT_KHR);
+#undef ADD_STAGE
+
+		const uint32_t maxShaderGroups = 4;
+		VkRayTracingShaderGroupCreateInfoKHR shaderGroups[maxShaderGroups];
+		uint32_t numShaderGroups = 0;
+		uint32_t numShaders = 0;
+		uint32_t idxMiss = 0;
+		uint32_t idxHit = 0;
+		uint32_t idxCallable = 0;
+
+		if (mRgen)
+		{
+			//General group ray gen
+			shaderGroups[numShaderGroups++] = VkRayTracingShaderGroupCreateInfoKHR{
+				.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+				.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+				.generalShader = numShaders++,
+				.closestHitShader = VK_SHADER_UNUSED_KHR,
+				.anyHitShader = VK_SHADER_UNUSED_KHR,
+				.intersectionShader = VK_SHADER_UNUSED_KHR,
+			};
+		}
+		if (mMiss)
+		{
+			//general group miss
+			idxMiss = numShaders;
+			shaderGroups[numShaderGroups++] = VkRayTracingShaderGroupCreateInfoKHR{
+				.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+				.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+				.generalShader = numShaders++,
+				.closestHitShader = VK_SHADER_UNUSED_KHR,
+				.anyHitShader = VK_SHADER_UNUSED_KHR,
+				.intersectionShader = VK_SHADER_UNUSED_KHR,
+			};
+		}
+		//hit group for now triangle hit group
+		if (mCHit || mAHit || mInter)
+		{
+			idxHit = numShaders;
+			shaderGroups[numShaderGroups++] = VkRayTracingShaderGroupCreateInfoKHR{
+				.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+				.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
+				.generalShader = VK_SHADER_UNUSED_KHR,
+				.closestHitShader = mCHit? numShaders++: VK_SHADER_UNUSED_KHR,
+				.anyHitShader = mAHit? numShaders++ : VK_SHADER_UNUSED_KHR,
+				.intersectionShader = mInter? numShaders++ : VK_SHADER_UNUSED_KHR,
+			};
+		}
+		//callable general group
+		if (mCall)
+		{
+			idxCallable = numShaders;
+			shaderGroups[numShaderGroups++] = VkRayTracingShaderGroupCreateInfoKHR{
+				.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+				.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+				.generalShader = numShaders++,
+				.closestHitShader = VK_SHADER_UNUSED_KHR,
+				.anyHitShader = VK_SHADER_UNUSED_KHR,
+				.intersectionShader = VK_SHADER_UNUSED_KHR,
+			};
+		}
+
+		VkRayTracingPipelineCreateInfoKHR ciRtPipeline{
+			.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR,
+		  .stageCount = numShaderStages,
+		  .pStages = ciShaderStages,
+		  .groupCount = numShaderGroups,
+		  .pGroups = shaderGroups,
+		  .maxPipelineRayRecursionDepth = 10,
+		  .layout = rtps->pipelineLayout_,
+		};
+		res = vkCreateRayTracingPipelinesKHR(vkDevice_, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &ciRtPipeline, nullptr, &rtps->pipeline_);
+		GAIA_ASSERT(res == VK_SUCCESS, "error code = ", res);
+
+		//create shader binding table buffer
+		VkPhysicalDeviceRayTracingPipelinePropertiesKHR propsRT{
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR,
+		};
+		VkPhysicalDeviceProperties2 props{
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+			.pNext = &propsRT,
+		};
+		vkGetPhysicalDeviceProperties2(vkPhysicsalDevice_, &props);
+
+		uint32_t handleSize = propsRT.shaderGroupHandleSize;
+		uint32_t handleSizeAligned = getAlignedSize(propsRT.shaderGroupHandleSize, propsRT.shaderGroupHandleAlignment);
+		uint32_t sbtSize = numShaderGroups * handleSizeAligned;
+
+		GAIA_ASSERT(sbtSize, "");
+
+		std::vector<uint8_t> shaderHandleStorage(sbtSize);
+		vkGetRayTracingShaderGroupHandlesKHR(vkDevice_, rtps->pipeline_, 0, numShaderGroups, sbtSize, shaderHandleStorage.data());
+
+		const uint32_t sbtEntrySizeAligned = getAlignedSize(handleSizeAligned, propsRT.shaderGroupBaseAlignment);
+		const uint32_t sbtBufferSize = numShaderGroups * sbtEntrySizeAligned;
+
+		// repack SBT respecting `shaderGroupBaseAlignment`
+		std::vector<uint8_t> sbtStorage(sbtBufferSize);
+		for (uint32_t i = 0; i != numShaderGroups; i++) {
+			memcpy(sbtStorage.data() + i * sbtEntrySizeAligned, shaderHandleStorage.data() + i * handleSizeAligned, handleSize);
+		}
+
+		BufferDesc sbtBuffDesc{
+			.usage_type = BufferUsageBits_ShaderBindingTable,
+			.storage_type = StorageType_Device,
+			.size = sbtBufferSize,
+			.debugName = "Buffer: SBT",
+		};
+		rtps->sbt = createBuffer(sbtBuffDesc);
+		sbtBuffDesc.storage_type = StorageType_HostVisible;
+		Holder<BufferHandle> sbtStaging = createBuffer(sbtBuffDesc);
+
+		//copy the buffer
+		ICommandBuffer& cmdBuf = acquireCommandBuffer();
+		cmdBuf.copyBuffer(sbtStaging, sbtStorage.data(), sbtBufferSize * sizeof(uint8_t));
+		cmdBuf.cmdCopyBufferToBuffer(sbtStaging, rtps->sbt);
+		submit(cmdBuf);
+
+		//generate SBT entries
+		rtps->sbtEntryRayGen = {
+			.deviceAddress = gpuAddress(rtps->sbt),
+			.stride = handleSizeAligned,
+			.size = handleSizeAligned,
+		};
+
+		rtps->sbtEntryMiss = {
+			.deviceAddress = idxMiss ? gpuAddress(rtps->sbt , idxMiss * sbtEntrySizeAligned) : 0,
+			.stride = handleSizeAligned,
+			.size = handleSizeAligned,
+		};
+
+		rtps->sbtEntryHit = {
+			.deviceAddress = idxHit ? gpuAddress(rtps->sbt , idxHit * sbtEntrySizeAligned) : 0,
+			.stride = handleSizeAligned,
+			.size = handleSizeAligned,
+		};
+
+		rtps->sbtEntryCallable = {
+			.deviceAddress = idxCallable ? gpuAddress(rtps->sbt , idxCallable * sbtEntrySizeAligned) : 0,
+			.stride = handleSizeAligned,
+			.size = handleSizeAligned,
+		};
+		return rtps->pipeline_;
+	}
+	AccelStructHandle VulkanContext::BuildTLAS(AccelStructDesc& desc)
+	{
+		GAIA_ASSERT(desc.type = AccelStructType_TLAS, "invalid acceleration structure type")
+		GAIA_ASSERT(desc.geometryType == AccelStructGeomType_Instances, "Geometry type is Invalid");
+		GAIA_ASSERT(desc.instancesBufferAddress, "No instance buffer provided");
+
+		//GAIA_ASSERT(bufferPool_.get(desc.instancesBuffer)->vkUsageFlags_ & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, "missing flag");
+
+		VkAccelerationStructureGeometryKHR accelStructureGeometry{
+			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
+			.pNext = nullptr,
+			.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR,
+			.geometry =
+				{
+					.instances =
+						{
+							.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR,
+							.arrayOfPointers = VK_FALSE,
+							.data = desc.instancesBufferAddress,//{.deviceAddress = bufferPool_.get(desc.instancesBuffer)->getDeviceAddress()},
+						}
+				},
+			.flags = VK_GEOMETRY_OPAQUE_BIT_KHR,
+		};
+
+		//define geometry info to get the size of the acceleration structure
+		VkAccelerationStructureBuildGeometryInfoKHR accelStructureGeometryInfo{
+			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+			.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
+			.flags = getVkAccelStructBuildFlags(desc.buildFlags),
+			.geometryCount = 1,
+			.pGeometries = &accelStructureGeometry,
+		};
+
+		VkAccelerationStructureBuildSizesInfoKHR accelerationStructureBuildSizesInfo = {
+			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
+		};
+		vkGetAccelerationStructureBuildSizesKHR(vkDevice_,
+			VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+			&accelStructureGeometryInfo,
+			&desc.buildrange.primitiveCount,
+			&accelerationStructureBuildSizesInfo);
+
+		VulkanAccelerationStructure accelStruct = {
+			.isTLAS = true,
+			.buildRangeInfo =
+				{
+					.primitiveCount = desc.buildrange.primitiveCount,
+					.primitiveOffset = desc.buildrange.primitiveOffset,
+					.firstVertex = desc.buildrange.firstVertex,
+					.transformOffset = desc.buildrange.transformOffset,
+				},
+		};
+		BufferDesc accelBufferCI = {
+			.usage_type = BufferUsageBits_AccelStructStorage,
+			.storage_type = StorageType_Device,
+			.size = accelerationStructureBuildSizesInfo.accelerationStructureSize,
+			.debugName = "accelStructure",
+		};
+		accelStruct.buffer = createBuffer(accelBufferCI);
+
+		VkAccelerationStructureCreateInfoKHR as_ci{
+			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
+			.pNext = nullptr,
+			.createFlags = getVkAccelStructBuildFlags(desc.buildFlags),
+			.buffer = bufferPool_.get(accelStruct.buffer)->vkBuffer_,
+			.size = accelerationStructureBuildSizesInfo.accelerationStructureSize,
+			.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
+		};
+		auto res = vkCreateAccelerationStructureKHR(vkDevice_, &as_ci, nullptr, &accelStruct.vkAccelStructure);
+		GAIA_ASSERT(res == VK_SUCCESS, "");
+
+		BufferDesc scratchBufferDesc{
+			.usage_type = BufferUsageBits_Storage,
+			.storage_type = StorageType_Device,
+			.size = accelerationStructureBuildSizesInfo.buildScratchSize,
+			.debugName = "TLAS scratch buffer",
+		};
+		Holder<BufferHandle> scratchBuffer = createBuffer(scratchBufferDesc);
+
+		VkAccelerationStructureBuildGeometryInfoKHR accelStructureGeometryInfo{
+			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+			.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
+			.flags = getVkAccelStructBuildFlags(desc.buildFlags),
+			.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
+			.dstAccelerationStructure = accelStruct.vkAccelStructure,
+			.geometryCount = 1,
+			.pGeometries = &accelStructureGeometry,
+			.scratchData = {.deviceAddress = bufferPool_.get(scratchBuffer)->getDeviceAddress()},
+		};
+		if (desc.buildFlags & AccelStructBuildFlagBits_AllowUpdate)
+		{
+			//store the scratch buffer for future updates
+			accelStruct.scratchBuffer = std::move(scratchBuffer);
+		}
+
+		//build the bvh
+		VkAccelerationStructureBuildRangeInfoKHR* rangesPtr[] = { &accelStruct.buildRangeInfo };
+		ICommandBuffer& cmdBuffer = acquireCommandBuffer();
+		VulkanCommandBuffer& vkCmdBuf = static_cast<VulkanCommandBuffer&>(cmdBuffer);
+		vkCmdBuildAccelerationStructuresKHR(vkCmdBuf.getVkCommandBuffer(), 1, &accelStructureGeometryInfo, rangesPtr);
+		submit(cmdBuffer);
+
+		VkAccelerationStructureDeviceAddressInfoKHR add{
+			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
+			.accelerationStructure = accelStruct.vkAccelStructure,
+		};
+		accelStruct.deviceAddress = vkGetAccelerationStructureDeviceAddressKHR(vkDevice_, &add);
+
+		AccelStructHandle accHandle = accelStructurePool_.Create(std::move(accelStruct));
+		return accHandle;
+	}
+	AccelStructHandle VulkanContext::BuildBLAS(AccelStructDesc& desc)
+	{
+		GAIA_ASSERT(desc.type = AccelStructType_BLAS, "invalid acceleration structure type")
+		GAIA_ASSERT(desc.geometryType == AccelStructGeomType_Triangles, "Geometry type is Invalid");
+		GAIA_ASSERT(desc.numVertices, "Number of vertices is <= 0");
+		GAIA_ASSERT(desc.indexBufferAddress, "No index buffer provided");
+		GAIA_ASSERT(desc.vertexBufferAddress, "No vertex buffer provided");
+		GAIA_ASSERT(desc.transformBufferAddress, "No transforms buffer provided");
+
+		//GAIA_ASSERT(bufferPool_.get(desc.vertexBuffer)->vkUsageFlags_ & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, "missing flag");
+		//GAIA_ASSERT(bufferPool_.get(desc.indexBuffer)->vkUsageFlags_ & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, "missing flag");
+		//GAIA_ASSERT(bufferPool_.get(desc.transformBuffer)->vkUsageFlags_ & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, "missing flag");
+
+		VkGeometryFlagsKHR geometryFlags = 0;
+		if (desc.geometryFlags & AccelStructGeometryFlagBits_Opaque)
+		{
+			geometryFlags |= VK_GEOMETRY_OPAQUE_BIT_KHR;
+		}
+		if (desc.geometryFlags & AccelStructGeometryFlagBits_NoDuplicateAnyHit)
+		{
+			geometryFlags |= VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR;
+		}
+
+		VkAccelerationStructureGeometryKHR accelStructureGeometry{
+			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
+			.pNext = nullptr,
+			.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR,
+			.geometry =
+				{
+					.triangles =
+						{
+							.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR,
+							.pNext = nullptr,
+							.vertexFormat = getVkFormatFromFormat(desc.vertexFormat),
+							.vertexData = {.deviceAddress = desc.vertexBufferAddress},
+							.vertexStride = desc.vertexStride ? desc.vertexStride : getFormatSize(desc.vertexFormat),
+							.maxVertex = desc.numVertices - 1,
+							.indexType = VK_INDEX_TYPE_UINT32,
+							.indexData = {.deviceAddress = desc.indexBufferAddress},
+							.transformData = {.deviceAddress = desc.transformBufferAddress},
+						}
+				},
+			.flags = geometryFlags,
+		};
+
+		//define geometry info to get the size of the acceleration structure
+		VkAccelerationStructureBuildGeometryInfoKHR accelStructureGeometryInfo{
+			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+			.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+			.flags = getVkAccelStructBuildFlags(desc.buildFlags),
+			.geometryCount = 1,
+			.pGeometries = &accelStructureGeometry,
+		};
+
+		VkAccelerationStructureBuildSizesInfoKHR accelerationStructureBuildSizesInfo = {
+			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
+		};
+		vkGetAccelerationStructureBuildSizesKHR(vkDevice_,
+			VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+			&accelStructureGeometryInfo,
+			&desc.buildrange.primitiveCount,
+			&accelerationStructureBuildSizesInfo);
+
+		VulkanAccelerationStructure accelStruct = {
+			.isTLAS = false,
+			.buildRangeInfo =
+				{
+					.primitiveCount = desc.buildrange.primitiveCount,
+					.primitiveOffset = desc.buildrange.primitiveOffset,
+					.firstVertex = desc.buildrange.firstVertex,
+					.transformOffset = desc.buildrange.transformOffset,
+				},
+		};
+		BufferDesc accelBufferCI = {
+			.usage_type = BufferUsageBits_AccelStructStorage,
+			.storage_type = StorageType_Device,
+			.size = accelerationStructureBuildSizesInfo.accelerationStructureSize,
+			.debugName = "accelStructure",
+		};
+		accelStruct.buffer = createBuffer(accelBufferCI);
+
+		VkAccelerationStructureCreateInfoKHR as_ci{
+			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
+			.pNext = nullptr,
+			.createFlags = getVkAccelStructBuildFlags(desc.buildFlags),
+			.buffer = bufferPool_.get(accelStruct.buffer)->vkBuffer_,
+			.size = accelerationStructureBuildSizesInfo.accelerationStructureSize,
+			.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+		};
+		auto res = vkCreateAccelerationStructureKHR(vkDevice_, &as_ci, nullptr, &accelStruct.vkAccelStructure);
+		GAIA_ASSERT(res == VK_SUCCESS,"");
+
+		BufferDesc scratchBufferDesc{
+			.usage_type = BufferUsageBits_Storage,
+			.storage_type = StorageType_Device,
+			.size = accelerationStructureBuildSizesInfo.buildScratchSize,
+			.debugName = "",
+		};
+		Holder<BufferHandle> scratchBuffer = createBuffer(scratchBufferDesc);
+
+		VkAccelerationStructureBuildGeometryInfoKHR accelStructureGeometryInfo{
+			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+			.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+			.flags = getVkAccelStructBuildFlags(desc.buildFlags),
+			.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
+			.dstAccelerationStructure = accelStruct.vkAccelStructure,
+			.geometryCount = 1,
+			.pGeometries = &accelStructureGeometry,
+			.scratchData = {.deviceAddress = bufferPool_.get(scratchBuffer)->getDeviceAddress()},
+		};
+
+		//build the bvh
+		VkAccelerationStructureBuildRangeInfoKHR* rangesPtr[] = { &accelStruct.buildRangeInfo };
+		ICommandBuffer& cmdBuffer = acquireCommandBuffer();
+		VulkanCommandBuffer& vkCmdBuf = static_cast<VulkanCommandBuffer&>(cmdBuffer);
+		vkCmdBuildAccelerationStructuresKHR(vkCmdBuf.getVkCommandBuffer(), 1, &accelStructureGeometryInfo, rangesPtr);
+		submit(cmdBuffer);
+
+		VkAccelerationStructureDeviceAddressInfoKHR add{
+			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
+			.accelerationStructure = accelStruct.vkAccelStructure,
+		};
+		accelStruct.deviceAddress = vkGetAccelerationStructureDeviceAddressKHR(vkDevice_, &add);
+
+		AccelStructHandle accHandle = accelStructurePool_.Create(std::move(accelStruct));
+		return accHandle;
 	}
 	void VulkanContext::createInstance()
 	{
@@ -1475,6 +1973,140 @@ namespace Gaia {
 			return VK_FORMAT_UNDEFINED;
 		}
 	}
+	uint32_t getFormatSize(Format format)
+	{
+		switch (format)
+		{
+		case Format_Invalid:
+			return 0;
+
+			// R formats
+		case Format_R_UN8:
+			return sizeof(uint8_t)*1;
+		case Format_R_UN16:
+			return sizeof(uint16_t) * 1;
+		case Format_R_UI8:
+			return sizeof(uint8_t) * 1;
+		case Format_R_UI16:
+			return sizeof(uint16_t) * 1;
+		case Format_R_UI32:
+			return sizeof(uint32_t) * 1;
+		case Format_R_SI8:
+			return sizeof(uint8_t) * 1;
+		case Format_R_SN8:
+			return sizeof(uint8_t) * 1;
+		case Format_R_SI16:
+			return sizeof(uint16_t) * 1;
+		case Format_R_SN16:
+			return sizeof(uint16_t) * 1;
+		case Format_R_SI32:
+			return sizeof(uint32_t) * 1;
+		case Format_R_F16:
+			return sizeof(uint16_t) * 1;
+		case Format_R_F32:
+			return sizeof(uint32_t) * 1;
+
+			// RG formats
+		case Format_RG_UN8:
+			return sizeof(uint8_t) * 2;
+		case Format_RG_UN16:
+			return sizeof(uint16_t) * 2;
+		case Format_RG_UI8:
+			return sizeof(uint8_t) * 2;
+		case Format_RG_UI16:
+			return sizeof(uint16_t) * 2;
+		case Format_RG_UI32:
+			return sizeof(uint32_t) * 2;
+		case Format_RG_SI8:
+			return sizeof(uint8_t) * 2;
+		case Format_RG_SN8:
+			return sizeof(uint8_t) * 2;
+		case Format_RG_SI16:
+			return sizeof(uint16_t) * 2;
+		case Format_RG_SN16:
+			return sizeof(uint16_t) * 2;
+		case Format_RG_SI32:
+			return sizeof(uint32_t) * 2;
+		case Format_RG_F16:
+			return sizeof(uint16_t) * 2;
+		case Format_RG_F32:
+			return sizeof(uint32_t) * 2;
+
+			// RGB formats
+		case Format_RGB_F16:
+			return sizeof(uint16_t) * 3;
+		case Format_RGB_F32:
+			return sizeof(uint32_t) * 3;
+		case Format_RGB_UN8:
+			return sizeof(uint8_t) * 3;
+		case Format_RGB_UI8:
+			return sizeof(uint8_t) * 3;
+		case Format_RGB_UN16:
+			return sizeof(uint16_t) * 3;
+		case Format_RGB_UI16:
+			return sizeof(uint16_t) * 3;
+		case Format_RGB_UI32:
+			return sizeof(uint32_t) * 3;
+		case Format_RGB_SI8:
+			return sizeof(uint8_t) * 3;
+		case Format_RGB_SN8:
+			return sizeof(uint8_t) * 3;
+		case Format_RGB_SI16:
+			return sizeof(uint16_t) * 3;
+		case Format_RGB_SN16:
+			return sizeof(uint16_t) * 3;
+		case Format_RGB_SI32:
+			return sizeof(uint32_t) * 3;
+
+			// RGBA formats
+		case Format_RGBA_UN8:
+			return sizeof(uint8_t) * 4;
+		case Format_RGBA_SRGB8:
+			return sizeof(uint8_t) * 4;
+		case Format_RGBA_UI8:
+			return sizeof(uint8_t) * 4;
+		case Format_RGBA_UI32:
+			return sizeof(uint32_t) * 4;
+		case Format_RGBA_SI8:
+			return sizeof(uint8_t) * 4;
+		case Format_RGBA_SN8:
+			return sizeof(uint8_t) * 4;
+		case Format_RGBA_SI32:
+			return sizeof(uint32_t) * 4;
+		case Format_RGBA_F16:
+			return sizeof(uint16_t) * 4;
+		case Format_RGBA_F32:
+			return sizeof(uint32_t) * 4;
+
+			// BGRA formats
+		case Format_BGRA_UN8:
+			return sizeof(uint8_t) * 4;
+		case Format_BGRA_SRGB8:
+			return sizeof(uint8_t) * 4;
+
+			// Compressed formats might be wrong
+		case Format_ETC2_RGB8:
+			return sizeof(uint8_t) * 4;
+		case Format_ETC2_SRGB8:
+			return sizeof(uint8_t) * 4;
+		case Format_BC7_SRGB:
+			return sizeof(uint8_t) * 4;
+
+			//depth formats
+		case Format_Z_UN16:
+			return sizeof(uint16_t) * 1;
+		case Format_Z_UN24:
+			return 24/8 * 1;
+		case Format_Z_F32:
+			return sizeof(uint32_t) * 1;
+		case Format_Z_UN24_S_UI8:
+			return sizeof(uint32_t) * 1;
+		case Format_Z_F32_S_UI8:
+			return 40/8;
+		default:
+			return 0;
+		}
+	}
 	VkCullModeFlagBits getVkCullModeFromCullMode(CullMode mode)
 	{
 		switch (mode)
@@ -1618,6 +2250,8 @@ namespace Gaia {
 			return VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
 		case DescriptorType_InlineUniformBlock:
 			return VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK;
+		case DescriptorType_AccelerationStructure:
+			return VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
 		}
 	}
 	VkImageLayout getVkImageLayoutFromImageLayout(ImageLayout layout)
@@ -1686,6 +2320,33 @@ namespace Gaia {
 			return VK_IMAGE_LAYOUT_UNDEFINED;
 		}
 	}
+
+	VkAccelerationStructureCreateFlagsKHR getVkAccelStructBuildFlags(uint8_t bit)
+	{
+		VkAccelerationStructureCreateFlagsKHR flags = 0;
+		if (bit & AccelStructBuildFlagBits_PreferFastTrace)
+		{
+			flags |= VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+		}
+		if (bit & AccelStructBuildFlagBits_PreferFastBuild)
+		{
+			flags |= VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR;
+		}
+		if (bit & AccelStructBuildFlagBits_AllowCompaction)
+		{
+			flags |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR;
+		}
+		if (bit & AccelStructBuildFlagBits_AllowUpdate)
+		{
+			flags |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
+		}
+		if (bit & AccelStructBuildFlagBits_LowMemory)
+		{
+			flags |= VK_BUILD_ACCELERATION_STRUCTURE_LOW_MEMORY_BIT_KHR;
+		}
+		return flags;
+	}
+
 	VulkanImmediateCommands::VulkanImmediateCommands(VkDevice device, uint32_t queueFamilyIndex, const char* debugName)
 		: device_(device), queueFamilyIndex_(queueFamilyIndex), debugName_(debugName)
 	{
@@ -2109,6 +2770,23 @@ namespace Gaia {
 		{
 			buffer->bufferSubData(*ctx_,offset, sizeInBytes, data);
 		}
+	}
+	void VulkanCommandBuffer::cmdBindRayTracingPipeline(RayTracingPipelineHandle handle)
+	{
+		RayTracingPipelineState* rtps = ctx_->rayTracingPipelinePool_.get(handle);
+		GAIA_ASSERT(rtps, "");
+		vkCmdBindPipeline(commandBufferWraper_->cmdBuffer_, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, rtps->pipeline_);
+	}
+	void VulkanCommandBuffer::cmdTraceRays(uint32_t width, uint32_t height, uint32_t depth, RayTracingPipelineHandle handle)
+	{
+		RayTracingPipelineState* rtps = ctx_->rayTracingPipelinePool_.get(handle);
+		GAIA_ASSERT(rtps, "");
+		vkCmdTraceRaysKHR(commandBufferWraper_->cmdBuffer_,
+			&rtps->sbtEntryRayGen,
+			&rtps->sbtEntryMiss,
+			&rtps->sbtEntryHit,
+			&rtps->sbtEntryCallable,
+			width, height, depth);
 	}
 	void VulkanCommandBuffer::cmdCopyBufferToBuffer(BufferHandle srcBufferHandle, BufferHandle dstBufferHandle, uint32_t offset)
 	{

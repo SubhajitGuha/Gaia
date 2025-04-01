@@ -48,3 +48,19 @@ void Gaia::destroy(IContext* ctx, SamplerHandle handle)
 		ctx->destroy(handle);
 	}
 }
+
+void Gaia::destroy(Gaia::IContext* ctx, Gaia::AccelStructHandle handle)
+{
+	if (ctx)
+	{
+		ctx->destroy(handle);
+	}
+}
+
+void Gaia::destroy(Gaia::IContext* ctx, Gaia::RayTracingPipelineHandle handle)
+{
+	if (ctx)
+	{
+		ctx->destroy(handle);
+	}
+}

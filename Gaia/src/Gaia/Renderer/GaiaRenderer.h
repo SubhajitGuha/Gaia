@@ -57,6 +57,8 @@ namespace Gaia
 	using SamplerHandle = Handle<struct Sampler>;
 	using ShaderModuleHandle = Handle<struct ShaderModule>;
 	using DescriptorSetLayoutHandle = Handle<struct DescriptorSetLayout>;
+	using AccelStructHandle = Handle<struct AcclerationStructure>;
+	using RayTracingPipelineHandle = Handle<struct RayTracingPipeline>;
 
 	//forward declare IContext
 	class IContext;
@@ -67,11 +69,11 @@ namespace Gaia
 	void destroy(Gaia::IContext* ctx, Gaia::BufferHandle handle);
 	void destroy(Gaia::IContext* ctx, Gaia::TextureHandle handle);
 	void destroy(Gaia::IContext* ctx, Gaia::DescriptorSetLayoutHandle handle);
-	void destroy(IContext* ctx, SamplerHandle handle);
+	void destroy(Gaia::IContext* ctx, Gaia::SamplerHandle handle);
+	void destroy(Gaia::IContext* ctx, Gaia::AccelStructHandle);
+	void destroy(Gaia::IContext* ctx, Gaia::RayTracingPipelineHandle handle);
 
-	//void destroy(IContext* ctx, RayTracingPipelineHandle handle);
 	//void destroy(IContext* ctx, QueryPoolHandle handle);
-	//void destroy(IContext* ctx, AccelStructHandle handle);
 
 	template<typename HandleType>
 	class Holder final
@@ -520,6 +522,27 @@ namespace Gaia
 		}
 	};
 
+	struct RayTracingPipelineDesc final {
+		ShaderModuleHandle smRayGen;
+		ShaderModuleHandle smAnyHit;
+		ShaderModuleHandle smClosestHit;
+		ShaderModuleHandle smMiss;
+		ShaderModuleHandle smIntersection;
+		ShaderModuleHandle smCallable;
+		const char* enteryPoint = "main";
+		DescriptorSetLayoutHandle descriptorSetLayout[MAX_DESCRIPTOR_SETS];
+		const char* debugName = "";
+		uint32_t getNumDescriptorSetLayouts()
+		{
+			uint32_t n = 0;
+			while (n < MAX_DESCRIPTOR_SETS && descriptorSetLayout[n].isValid())
+			{
+				n++;
+			}
+			return n;
+		}
+	};
+
 	enum ShaderStage : uint32_t
 	{
 		Stage_None = 0,
@@ -533,9 +556,9 @@ namespace Gaia
 
 		// ray tracing
 		Stage_RayGen = 1 << 8,
-		Stage_AnyHit = 1 << 9,
-		Stage_ClosestHit = 1 << 10,
-		Stage_Miss = 1 << 11,
+		Stage_Miss = 1 << 9,
+		Stage_AnyHit = 1 << 10,
+		Stage_ClosestHit = 1 << 11,
 		Stage_Intersection = 1 << 12,
 		Stage_Callable = 1 << 13,
 	};
@@ -570,6 +593,7 @@ namespace Gaia
 		DescriptorType_StorageBufferDynamic,
 		DescriptorType_InputAttachment,
 		DescriptorType_InlineUniformBlock,
+		DescriptorType_AccelerationStructure,
 	};
 
 	
@@ -602,6 +626,77 @@ namespace Gaia
 			}
 			return handles;
 		}
+	};
+
+	enum AccelStructType : uint8_t {
+		AccelStructType_Invalid = 0,
+		AccelStructType_TLAS = 1,
+		AccelStructType_BLAS = 2,
+	};
+
+	enum AccelStructGeomType : uint8_t {
+		AccelStructGeomType_Triangles = 0,
+		AccelStructGeomType_AABBs = 1,
+		AccelStructGeomType_Instances = 2,
+	};
+
+	enum AccelStructBuildFlagBits : uint8_t {
+		AccelStructBuildFlagBits_AllowUpdate = 1 << 0,
+		AccelStructBuildFlagBits_AllowCompaction = 1 << 1,
+		AccelStructBuildFlagBits_PreferFastTrace = 1 << 2,
+		AccelStructBuildFlagBits_PreferFastBuild = 1 << 3,
+		AccelStructBuildFlagBits_LowMemory = 1 << 4,
+	};
+
+	enum AccelStructGeometryFlagBits : uint8_t {
+		AccelStructGeometryFlagBits_Opaque = 1 << 0,
+		AccelStructGeometryFlagBits_NoDuplicateAnyHit = 1 << 1,
+	};
+
+	enum AccelStructInstanceFlagBits : uint8_t {
+		AccelStructInstanceFlagBits_TriangleFacingCullDisable = 1 << 0,
+		AccelStructInstanceFlagBits_TriangleFlipFacing = 1 << 1,
+		AccelStructInstanceFlagBits_ForceOpaque = 1 << 2,
+		AccelStructInstanceFlagBits_ForceNoOpaque = 1 << 3,
+	};
+
+	struct AccelStructBuildRange {
+		uint32_t primitiveCount = 0;
+		uint32_t primitiveOffset = 0;
+		uint32_t firstVertex = 0;
+		uint32_t transformOffset = 0;
+	};
+
+	struct mat3x4 {
+		float matrix[3][4];
+	};
+
+	//this structure has same layout and bits offset as "VkAccelerationStructureInstanceKHR"
+	struct AccelStructInstance {
+		mat3x4 transform;
+		uint32_t instanceCustomIndex : 24 = 0;
+		uint32_t mask : 8 = 0xff;
+		uint32_t instanceShaderBindingTableRecordOffset : 24 = 0;
+		uint32_t flags : 8 = AccelStructInstanceFlagBits_TriangleFacingCullDisable;
+		uint64_t accelerationStructureReference = 0;
+	};
+
+	struct AccelStructDesc {
+		AccelStructType type = AccelStructType_Invalid;
+		AccelStructGeomType geometryType = AccelStructGeomType_Triangles;
+		uint8_t geometryFlags = AccelStructGeometryFlagBits_Opaque;
+
+		Format vertexFormat = Format_Invalid;
+		uint64_t vertexBufferAddress; //stores the vertex buffer gpu address
+		uint32_t vertexStride = 0;//zero means the size of `vertexFormat`
+		uint32_t numVertices = 0;
+		IndexFormat indexFormat = IndexFormat_U32;
+		uint64_t indexBufferAddress; //stores the index buffer gpu address
+		uint64_t transformBufferAddress; //stores the transforms buffer gpu address
+		uint64_t instancesBufferAddress; //stores the instances buffer gpu address
+		AccelStructBuildRange buildrange = {};
+		uint8_t buildFlags = AccelStructBuildFlagBits_PreferFastTrace;
+		const char* debugName;
 	};
 
 	struct Viewport {
@@ -641,6 +736,9 @@ namespace Gaia
 		virtual ~ICommandBuffer() = default;
 
 		virtual void copyBuffer(BufferHandle bufferHandle, void* data, size_t sizeInBytes, uint32_t offset = 0) = 0;
+
+		virtual void cmdBindRayTracingPipeline(RayTracingPipelineHandle handle) = 0;
+		virtual void cmdTraceRays(uint32_t width, uint32_t height, uint32_t depth, RayTracingPipelineHandle handle) = 0;
 
 		virtual void cmdTransitionImageLayout(TextureHandle image, ImageLayout newLayout) = 0;
 		virtual void cmdBindGraphicsPipeline(RenderPipelineHandle renderPipeline) = 0;
@@ -686,6 +784,8 @@ namespace Gaia
 		virtual Holder<ShaderModuleHandle> createShaderModule(ShaderModuleDesc& desc) = 0;
 		virtual Holder<DescriptorSetLayoutHandle> createDescriptorSetLayout(std::vector<DescriptorSetLayoutDesc>& desc) = 0;
 		virtual Holder<SamplerHandle> createSampler(SamplerStateDesc& desc) = 0;
+		virtual Holder<AccelStructHandle> createAccelerationStructure(AccelStructDesc& desc) = 0;
+		virtual Holder<RayTracingPipelineHandle> createRayTracingPipeline(const RayTracingPipelineDesc& desc) = 0;
 
 		virtual void destroy(BufferHandle handle) = 0;
 		virtual void destroy(TextureHandle handle) = 0;
@@ -693,6 +793,8 @@ namespace Gaia
 		virtual void destroy(ShaderModuleHandle handle) = 0;
 		virtual void destroy(DescriptorSetLayoutHandle handle) = 0;
 		virtual void destroy(SamplerHandle handle) = 0;
+		virtual void destroy(AccelStructHandle handle) = 0;
+		virtual void destroy(RayTracingPipelineHandle handle) = 0;
 
 		//swapchain functions
 		virtual TextureHandle getCurrentSwapChainTexture() = 0;
@@ -700,6 +802,8 @@ namespace Gaia
 		virtual ColorSpace getSwapChainColorSpace() const = 0;
 		virtual uint32_t getNumSwapchainImages() const = 0;
 		virtual void recreateSwapchain(int newWidth, int newHeight) = 0;
+
+		virtual uint64_t gpuAddress(BufferHandle handle, size_t offset = 0) = 0;
 
 		virtual uint32_t getFrameBufferMSAABitMask() const = 0;
 	};

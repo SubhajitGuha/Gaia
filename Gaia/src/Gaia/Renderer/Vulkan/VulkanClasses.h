@@ -80,6 +80,7 @@ namespace Gaia {
 	{
 		inline uint8_t* getMappedPtr() { return static_cast<uint8_t*>(mappedPtr_); }
 		inline bool isMapped() { return mappedPtr_ != nullptr; }
+		inline VkDeviceAddress getDeviceAddress() { return deviceAddress_; }
 
 		void bufferSubData(const VulkanContext& ctx, size_t offset, size_t size, const void* data);
 		void getBufferData(const VulkanContext& ctx, size_t offset, size_t size, void* data);
@@ -90,6 +91,7 @@ namespace Gaia {
 		VmaAllocation vmaAllocation_ = VK_NULL_HANDLE;
 		VkBufferUsageFlags vkUsageFlags_ = 0;
 		VkDeviceSize bufferSize_ = 0;
+		VkDeviceAddress deviceAddress_ = 0;
 		void* mappedPtr_ = nullptr;
 		bool isCoherentMemory_ = false;
 	};
@@ -118,6 +120,23 @@ namespace Gaia {
 		VkPipeline pipeline_ = VK_NULL_HANDLE;
 		VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
 		VkShaderStageFlags shaderStageFlags_ = 0;
+	};
+
+	struct RayTracingPipelineState final {
+		RayTracingPipelineDesc desc_;
+
+		VkPipeline pipeline_ = VK_NULL_HANDLE;
+		VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
+		VkShaderStageFlags shaderStageFlags_ = 0;
+
+		//shader binding table buffer
+		Holder<BufferHandle> sbt;
+
+		//needed in vkCmdTraceRaysKHR()
+		VkStridedDeviceAddressRegionKHR sbtEntryRayGen = {};
+		VkStridedDeviceAddressRegionKHR sbtEntryMiss = {};
+		VkStridedDeviceAddressRegionKHR sbtEntryHit = {};
+		VkStridedDeviceAddressRegionKHR sbtEntryCallable = {};
 	};
 
 	class VulkanPipelineBuilder final
@@ -331,6 +350,15 @@ namespace Gaia {
 
 	};
 
+	struct VulkanAccelerationStructure {
+		bool isTLAS = false;
+		VkAccelerationStructureBuildRangeInfoKHR buildRangeInfo = {};
+		VkAccelerationStructureKHR vkAccelStructure = VK_NULL_HANDLE;
+		uint64_t deviceAddress = 0;
+		Holder<BufferHandle> buffer;
+		Holder<BufferHandle> scratchBuffer; //store for tlas
+	};
+
 	class VulkanCommandBuffer final : public ICommandBuffer
 	{
 	public:
@@ -339,6 +367,9 @@ namespace Gaia {
 		~VulkanCommandBuffer() override;
 
 		void copyBuffer(BufferHandle bufferHandle, void* data, size_t sizeInBytes, uint32_t offset = 0) override;
+
+		void cmdBindRayTracingPipeline(RayTracingPipelineHandle handle);
+		void cmdTraceRays(uint32_t width, uint32_t height, uint32_t depth, RayTracingPipelineHandle handle);
 
 		void cmdTransitionImageLayout(TextureHandle image, ImageLayout newLayout) override;
 		void cmdBindGraphicsPipeline(RenderPipelineHandle renderPipeline) override;
@@ -400,13 +431,17 @@ namespace Gaia {
 		Holder<ShaderModuleHandle> createShaderModule(ShaderModuleDesc& desc) override;
 		Holder<DescriptorSetLayoutHandle> createDescriptorSetLayout(std::vector<DescriptorSetLayoutDesc>& desc) override;
 		Holder<SamplerHandle> createSampler(SamplerStateDesc& desc);
+		Holder<AccelStructHandle> createAccelerationStructure(AccelStructDesc& desc);
+		Holder<RayTracingPipelineHandle> createRayTracingPipeline(const RayTracingPipelineDesc& desc);
 
 		void destroy(BufferHandle handle) override;
 		void destroy(TextureHandle handle) override;
 		void destroy(RenderPipelineHandle handle) override;
 		void destroy(ShaderModuleHandle handle) override;
 		void destroy(DescriptorSetLayoutHandle handle) override;
-		void destroy(SamplerHandle handle);
+		void destroy(SamplerHandle handle) override;
+		void destroy(AccelStructHandle handle) override;
+		void destroy(RayTracingPipelineHandle handle) override;
 
 		//swapchain functions
 		TextureHandle getCurrentSwapChainTexture() override;
@@ -414,6 +449,8 @@ namespace Gaia {
 		ColorSpace getSwapChainColorSpace() const override;
 		uint32_t getNumSwapchainImages() const override;
 		void recreateSwapchain(int newWidth, int newHeight) override;
+
+		uint64_t gpuAddress(BufferHandle handle, size_t offset = 0) override;
 
 		VulkanDescriptorSet* getDescriptorSet(DescriptorSetLayoutHandle handle);
 		uint32_t getFrameBufferMSAABitMask() const override;
@@ -439,6 +476,12 @@ namespace Gaia {
 		}
 
 		VkPipeline getPipeline(RenderPipelineHandle handle);
+		VkPipeline getPipeline(RayTracingPipelineHandle handle);
+
+		AccelStructHandle BuildTLAS(AccelStructDesc& desc);
+		AccelStructHandle BuildBLAS(AccelStructDesc& desc);
+
+
 	private:
 		void createInstance();
 		void createSurface();
@@ -465,6 +508,10 @@ namespace Gaia {
 		std::deque<DeferredTask> deferredTask_;
 		void waitForDeferredTasks();
 		void deferredTask(std::packaged_task<void()>&& task);
+		inline uint32_t getAlignedSize(uint32_t value, uint32_t alignment)
+		{
+			return (value + alignment - 1) & ~(alignment - 1);
+		}
 	public:
 		DeviceQueues deviceQueues_;
 		std::unique_ptr<VulkanSwapchain> swapchain_;
@@ -477,11 +524,15 @@ namespace Gaia {
 		Pool<ShaderModule, ShaderModuleState> shaderModulePool_;
 		Pool<DescriptorSetLayout, VulkanDescriptorSet> descriptorSetPool_;
 		Pool<Sampler, VulkanSampler> samplerPool_;
+		Pool<AcclerationStructure, VulkanAccelerationStructure> accelStructurePool_;
+		Pool<RayTracingPipeline, RayTracingPipelineState> rayTracingPipelinePool_;
 	};
 
 	inline VkBlendOp getVkBlendOpFromBlendOp(BlendOp operation);
 	inline VkBlendFactor getVkBlendFactorFromBlendFactor(BlendFactor factor);
 	inline VkFormat getVkFormatFromFormat(Format format);
+	inline uint32_t getFormatSize(Format format);
+
 	inline VkCullModeFlagBits getVkCullModeFromCullMode(CullMode mode);
 	inline VkFrontFace getVkFrontFaceFromWindingMode(WindingMode mode);
 	inline VkPrimitiveTopology getVkPrimitiveTopologyFromTopology(Topology topology);
@@ -491,6 +542,7 @@ namespace Gaia {
 		VkDevice device);
 	inline VkDescriptorType getVkDescTypeFromDescType(DescriptorType type);
 	inline VkImageLayout getVkImageLayoutFromImageLayout(ImageLayout layout);
+	inline VkAccelerationStructureCreateFlagsKHR getVkAccelStructBuildFlags(AccelStructBuildFlagBits bit);
 	inline VkShaderStageFlags getVkShaderStageFromShaderStage(uint32_t stage)
 	{
 		uint32_t flag = 0u;
@@ -519,7 +571,8 @@ namespace Gaia {
 			flag |= VK_SHADER_STAGE_MISS_BIT_KHR;
 		if (stage& Stage_Callable)
 			flag |= VK_SHADER_STAGE_CALLABLE_BIT_KHR;
-		
+		if (stage & Stage_RayGen)
+			flag |= VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 		return flag;
 	}
 }
