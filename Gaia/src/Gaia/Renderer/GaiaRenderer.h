@@ -4,6 +4,7 @@
 #include "Gaia/Log.h"
 #include "memory"
 #include "Gaia/Renderer/Pool.h"
+#include "glm/glm.hpp"
 
 #define HALF_SIZE 2
 
@@ -608,6 +609,7 @@ namespace Gaia
 		std::vector<TextureHandle> texture;
 		std::vector<BufferHandle> buffer;
 		SamplerHandle sampler;
+		AccelStructHandle accelStructure; //for now supporting one TLAS acceleration structure
 		//TODO include other resource types
 
 		template<typename HandleType, typename HolderType>
@@ -626,6 +628,14 @@ namespace Gaia
 			}
 			return handles;
 		}
+	};
+
+	enum IndexFormat : uint8_t
+	{
+		IndexFormat_U8,
+		IndexFormat_U16,
+		IndexFormat_U32,
+
 	};
 
 	enum AccelStructType : uint8_t {
@@ -673,7 +683,7 @@ namespace Gaia
 
 	//this structure has same layout and bits offset as "VkAccelerationStructureInstanceKHR"
 	struct AccelStructInstance {
-		mat3x4 transform;
+		glm::mat3x4 transform;
 		uint32_t instanceCustomIndex : 24 = 0;
 		uint32_t mask : 8 = 0xff;
 		uint32_t instanceShaderBindingTableRecordOffset : 24 = 0;
@@ -691,12 +701,12 @@ namespace Gaia
 		uint32_t vertexStride = 0;//zero means the size of `vertexFormat`
 		uint32_t numVertices = 0;
 		IndexFormat indexFormat = IndexFormat_U32;
-		uint64_t indexBufferAddress; //stores the index buffer gpu address
-		uint64_t transformBufferAddress; //stores the transforms buffer gpu address
-		uint64_t instancesBufferAddress; //stores the instances buffer gpu address
+		uint64_t indexBufferAddress = 0; //stores the index buffer gpu address
+		uint64_t transformBufferAddress = 0; //stores the transforms buffer gpu address
+		uint64_t instancesBufferAddress = 0; //stores the instances buffer gpu address
 		AccelStructBuildRange buildrange = {};
 		uint8_t buildFlags = AccelStructBuildFlagBits_PreferFastTrace;
-		const char* debugName;
+		const char* debugName = "";
 	};
 
 	struct Viewport {
@@ -714,14 +724,6 @@ namespace Gaia
 		int y = 0;
 		uint32_t width = 0;
 		uint32_t height = 0;
-	};
-
-	enum IndexFormat : uint8_t
-	{
-		IndexFormat_U8,
-		IndexFormat_U16,
-		IndexFormat_U32,
-
 	};
 
 	struct ClearValue {
@@ -804,6 +806,7 @@ namespace Gaia
 		virtual void recreateSwapchain(int newWidth, int newHeight) = 0;
 
 		virtual uint64_t gpuAddress(BufferHandle handle, size_t offset = 0) = 0;
+		virtual uint64_t gpuAddress(AccelStructHandle handle) = 0;
 
 		virtual uint32_t getFrameBufferMSAABitMask() const = 0;
 	};

@@ -1,12 +1,13 @@
 #include "pch.h"
 #include "Gaia/Application.h"
 #include"ImGuiLayer.h"
+#define VK_NO_PROTOTYPES
 #include "backends/imgui_impl_vulkan.h"
 #include "backends/imgui_impl_glfw.h"
 #include "imgui_internal.h"
+#include "Gaia/Renderer/Vulkan/VulkanClasses.h"
 #include "Gaia/Log.h"
 #include "Gaia/Core.h"
-#include "Gaia/Renderer/Vulkan/VulkanClasses.h"
 
 //#include "ImGuizmo.h"
 #include "GLFW/glfw3.h"
@@ -41,6 +42,7 @@ namespace Gaia {
 	}
 	void ImGuiLayer::OnAttach()
 	{
+		
 		IMGUI_CHECKVERSION();
 		ImGui::CreateContext();
 		ImGuiIO& io = ImGui::GetIO(); (void)io;
@@ -121,7 +123,10 @@ namespace Gaia {
 
 		info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 
-
+		VkInstance instance = vulkan_ctx->getInstance();
+		ImGui_ImplVulkan_LoadFunctions([](const char* function_name, void* vulkan_instance) {
+			return vkGetInstanceProcAddr(*(reinterpret_cast<VkInstance*>(vulkan_instance)), function_name);
+			}, &instance);
 		ImGui_ImplVulkan_Init(&info);
 		ImGui_ImplVulkan_CreateFontsTexture();
 	}

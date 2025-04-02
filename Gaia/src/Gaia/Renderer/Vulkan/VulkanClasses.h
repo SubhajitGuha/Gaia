@@ -1,6 +1,5 @@
 #pragma once
-#include <vulkan/vulkan.hpp>
-#include "VkBootstrap.h"
+#include "volk.h"
 #include <vma/vk_mem_alloc.h>
 #include "Gaia/Renderer/GaiaRenderer.h"
 #include <future>
@@ -343,6 +342,7 @@ namespace Gaia {
 		//need static array for the pointer tobe valid
 		std::array<VkDescriptorImageInfo, MAX_IMAGE_DESCRIPTOR> imageInfo;
 		std::array<VkDescriptorBufferInfo, MAX_BUFFER_DESCRIPTOR> bufferInfo;
+		VkWriteDescriptorSetAccelerationStructureKHR accelStructWrite{}; //stores the write info for an accel struct if present
 		uint32_t totalDescriptorCount = 0;
 		const char* debugName_ = "";
 	public:
@@ -350,7 +350,7 @@ namespace Gaia {
 
 	};
 
-	struct VulkanAccelerationStructure {
+	struct VulkanAccelerationStructure final {
 		bool isTLAS = false;
 		VkAccelerationStructureBuildRangeInfoKHR buildRangeInfo = {};
 		VkAccelerationStructureKHR vkAccelStructure = VK_NULL_HANDLE;
@@ -451,6 +451,7 @@ namespace Gaia {
 		void recreateSwapchain(int newWidth, int newHeight) override;
 
 		uint64_t gpuAddress(BufferHandle handle, size_t offset = 0) override;
+		uint64_t gpuAddress(AccelStructHandle handle)override;
 
 		VulkanDescriptorSet* getDescriptorSet(DescriptorSetLayoutHandle handle);
 		uint32_t getFrameBufferMSAABitMask() const override;
@@ -542,7 +543,7 @@ namespace Gaia {
 		VkDevice device);
 	inline VkDescriptorType getVkDescTypeFromDescType(DescriptorType type);
 	inline VkImageLayout getVkImageLayoutFromImageLayout(ImageLayout layout);
-	inline VkAccelerationStructureCreateFlagsKHR getVkAccelStructBuildFlags(AccelStructBuildFlagBits bit);
+	inline VkAccelerationStructureCreateFlagsKHR getVkAccelStructBuildFlags(uint8_t bit);
 	inline VkShaderStageFlags getVkShaderStageFromShaderStage(uint32_t stage)
 	{
 		uint32_t flag = 0u;

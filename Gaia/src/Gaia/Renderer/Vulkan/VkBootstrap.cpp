@@ -1669,10 +1669,23 @@ Result<Device> DeviceBuilder::build() const {
     if (physical_device.surface != VK_NULL_HANDLE || physical_device.defer_surface_initialization)
         extensions_to_enable.push_back({ VK_KHR_SWAPCHAIN_EXTENSION_NAME });
 
+    //enable acceleration structure
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeature = {};
+    accelFeature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+    accelFeature.pNext =nullptr;
+    accelFeature.accelerationStructure = true;
 
+    //enable rt-pipeline
+    VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtPipelineFeature{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR, 
+    };
+    rtPipelineFeature.pNext = &accelFeature;
+    rtPipelineFeature.rayTracingPipeline = true;
+    
     //set up for dynamic rendering
     VkPhysicalDeviceVulkan13Features dynamic_rendering_feature{};
     dynamic_rendering_feature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+    dynamic_rendering_feature.pNext = &rtPipelineFeature;
     dynamic_rendering_feature.synchronization2 = true;
     dynamic_rendering_feature.dynamicRendering = true;
 
@@ -1680,6 +1693,7 @@ Result<Device> DeviceBuilder::build() const {
     vk12_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
     vk12_features.runtimeDescriptorArray = true;
     vk12_features.pNext = &dynamic_rendering_feature;
+    vk12_features.bufferDeviceAddress = true;
 
     extensions_to_enable.push_back({ VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME });
     

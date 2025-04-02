@@ -23,7 +23,6 @@
 #include <vector>
 #include <string>
 #include <system_error>
-
 #include <vulkan/vulkan_core.h>
 
 #include "VkBootstrapDispatch.h"

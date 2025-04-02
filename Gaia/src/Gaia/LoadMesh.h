@@ -82,9 +82,7 @@ namespace Gaia
 		std::string m_path;
 		std::vector<SubMesh> m_subMeshes;
 		std::vector<Material> pbrMaterials;
-		//gltf textures
 		std::vector<Texture> gltfTextures;
-		//Bounds total_bounds; //total mesh bounds
 		std::vector<glm::mat4> transforms;
 	private:
 		std::string extension = ".asset";

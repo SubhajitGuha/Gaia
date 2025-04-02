@@ -92,7 +92,7 @@ project "Gaia"
 	}
 
 	links{
-		"$(VULKAN_SDK)/lib/vulkan-1.lib",
+		-- "$(VULKAN_SDK)/lib/vulkan-1.lib",
 		"$(VULKAN_SDK)/lib/SPIRV-Tools.lib",
 		"$(VULKAN_SDK)/lib/SPIRV-Tools-diff.lib",
 		"$(VULKAN_SDK)/lib/SPIRV-Tools-link.lib",

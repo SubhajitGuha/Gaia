@@ -43,8 +43,18 @@ namespace Gaia
 		Holder<TextureHandle> renderTarget_;
 
 		Holder<RenderPipelineHandle> renderPipeline;
+		Holder<RayTracingPipelineHandle> rtPipeline;
+		std::vector<Holder<AccelStructHandle>> BLAS;
+		Holder<AccelStructHandle> TLAS;
+		Holder<BufferHandle> instancesBuffer;
+
 		Holder<ShaderModuleHandle> vertexShaderModule;
 		Holder<ShaderModuleHandle> fragmentShaderModule;
+		Holder<ShaderModuleHandle> rayGenShaderModule;
+		Holder<ShaderModuleHandle> closestHitShaderModule;
+		Holder<ShaderModuleHandle> anyHitShaderModule;
+		Holder<ShaderModuleHandle> missShaderModule;
+
 		Holder<BufferHandle> mvpBuffer;
 		Holder<BufferHandle> mvpBufferStaging;
 		Holder<BufferHandle> transformsBuffer;
@@ -65,7 +75,8 @@ namespace Gaia
 		Holder<DescriptorSetLayoutHandle> mvpMatrixDescriptorSetLayout;
 		Holder<DescriptorSetLayoutHandle> meshDescriptorSet;
 		Holder<DescriptorSetLayoutHandle> shadowDescSetLayout;
-		
+		Holder<DescriptorSetLayoutHandle> accelStructureDescSetLayout;
+
 		MVPMatrices mvpData = {};
 
 		//other components

@@ -34,7 +34,7 @@ namespace Gaia
 			{
 				idx = freeListHead_;
 				freeListHead_ = objects_[idx].nextFreeIndex_; //list head now becomes the next free index
-				objects_[idx].obj_ = obj;
+				objects_[idx].obj_ = std::move(obj);
 			}
 			else
 			{

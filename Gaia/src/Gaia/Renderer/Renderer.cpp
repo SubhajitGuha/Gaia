@@ -127,21 +127,21 @@ namespace Gaia
                 .binding = 0,
                 .descriptorCount = 1,
                 .descriptorType = DescriptorType_UniformBuffer,
-                .shaderStage = Stage_Vert | Stage_Frag,
+                .shaderStage = Stage_Vert | Stage_Frag | Stage_RayGen | Stage_ClosestHit | Stage_Miss,
                 .buffer = DescriptorSetLayoutDesc::getResource<BufferHandle>(mvpBuffer),
             },
              DescriptorSetLayoutDesc{
                 .binding = 1,
                 .descriptorCount = 1,
                 .descriptorType = DescriptorType_StorageBuffer,
-                .shaderStage = Stage_Vert | Stage_Frag,
+                .shaderStage = Stage_Vert | Stage_Frag | Stage_RayGen | Stage_ClosestHit | Stage_Miss,
                 .buffer = DescriptorSetLayoutDesc::getResource<BufferHandle>(transformsBuffer),
             },
             DescriptorSetLayoutDesc{
                 .binding = 2,
                 .descriptorCount = 1,
                 .descriptorType = DescriptorType_UniformBuffer,
-                .shaderStage = Stage_Frag | Stage_Vert,
+                .shaderStage = Stage_Frag | Stage_Vert | Stage_RayGen | Stage_ClosestHit | Stage_Miss,
                 .buffer = DescriptorSetLayoutDesc::getResource<BufferHandle>(lightParameterBuffer),
             },
            
@@ -153,14 +153,14 @@ namespace Gaia
                  .binding = 0,
                  .descriptorCount = 1,
                  .descriptorType = DescriptorType_StorageBuffer,
-                 .shaderStage = Stage_Frag,
+                 .shaderStage = Stage_Frag | Stage_RayGen | Stage_ClosestHit | Stage_Miss,
                  .buffer = DescriptorSetLayoutDesc::getResource<BufferHandle>(materialsBuffer),
              },
              DescriptorSetLayoutDesc{
                  .binding = 1,
                  .descriptorCount = static_cast<uint32_t>(glTfTextures.size()),
                  .descriptorType = DescriptorType_CombinedImageSampler,
-                 .shaderStage = Stage_Frag,
+                 .shaderStage = Stage_Frag | Stage_RayGen | Stage_ClosestHit | Stage_Miss,
                  .texture = DescriptorSetLayoutDesc::getResource<TextureHandle>(glTfTextures),
                  .sampler = imageSampler,
              },
@@ -225,6 +225,37 @@ namespace Gaia
         rps.vertexInput = vertexInput;
 
         renderPipeline = renderContext_->createRenderPipeline(rps);
+
+        //create vertex, index buffers and build the acceleration structure
+        createStaticBuffers(scene);
+
+        ShaderModuleDesc rayGenShaderDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/rayGen.rgen.spv", Stage_RayGen);
+        ShaderModuleDesc missShaderDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/rayMiss.rmiss.spv", Stage_Miss);
+        ShaderModuleDesc closestHitShaderDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/closestHit.rchit.spv", Stage_ClosestHit);
+
+        rayGenShaderModule = renderContext_->createShaderModule(rayGenShaderDesc);
+        missShaderModule = renderContext_->createShaderModule(missShaderDesc);
+        closestHitShaderModule = renderContext_->createShaderModule(closestHitShaderDesc);
+
+        std::vector<DescriptorSetLayoutDesc> accelStructDSL{
+             DescriptorSetLayoutDesc{
+              .binding = 0,
+              .descriptorCount = 1,
+              .descriptorType = DescriptorType_AccelerationStructure,
+              .shaderStage = Stage_Frag | Stage_Vert | Stage_RayGen | Stage_ClosestHit,
+              .accelStructure = TLAS
+            },
+        };
+        accelStructureDescSetLayout = renderContext_->createDescriptorSetLayout(accelStructDSL);
+        
+        RayTracingPipelineDesc rtpd{
+            .smRayGen = rayGenShaderModule,
+            .smClosestHit = closestHitShaderModule,
+            .smMiss = missShaderModule,
+        };
+        rtpd.descriptorSetLayout[0] = accelStructureDescSetLayout;
+        rtPipeline = renderContext_->createRayTracingPipeline(rtpd);
+
     }
     Renderer::~Renderer()
     {
@@ -364,7 +395,7 @@ namespace Gaia
             totalIndices += subMesh.Vertices.size();
         }
         BufferDesc vertexBufferDesc{
-            .usage_type = BufferUsageBits_Vertex,
+            .usage_type = BufferUsageBits_Vertex | BufferUsageBits_AccelStructBuildInputReadOnly,
             .storage_type = StorageType_Device,
             .size = buffer.size() * sizeof(LoadMesh::VertexAttributes),
         };
@@ -372,7 +403,7 @@ namespace Gaia
 
         BufferDesc indexBufferDesc
         {
-            .usage_type = BufferUsageBits_Index,
+            .usage_type = BufferUsageBits_Index | BufferUsageBits_AccelStructBuildInputReadOnly,
             .storage_type = StorageType_Device,
             .size = indicesBuffer.size() * sizeof(uint32_t),
         };
@@ -396,6 +427,90 @@ namespace Gaia
             cmdBuffer.cmdCopyBufferToBuffer(indexbufferStaging, indexBuffer);
             renderContext_->submit(cmdBuffer);
         }
+
+        //need a 3x4 transform buffer for blas build
+        BufferDesc blasTransform{
+            .usage_type = BufferUsageBits_AccelStructBuildInputReadOnly,
+            .storage_type = StorageType_HostVisible,
+            .size = sizeof(glm::mat3x4),
+        };
+        Holder<BufferHandle> transformBufferBLAS = renderContext_->createBuffer(blasTransform);
+        glm::mat3x4 tdata(1.0);
+        {
+            auto& cmdBuffer = renderContext_->acquireCommandBuffer();
+            cmdBuffer.copyBuffer(transformBufferBLAS, &tdata[0][0], sizeof(glm::mat3x4));
+            renderContext_->submit(cmdBuffer);
+        }
+
+        //create blas for every sub meshes
+        uint32_t offset = 0;
+        uint32_t index_offset = 0;
+        for (int k = 0; k < mesh.m_subMeshes.size(); k++)
+        {
+            SubMesh& subMesh = mesh.m_subMeshes[k];
+            AccelStructDesc blasDesc{
+                .type = AccelStructType_BLAS,
+                .geometryType = AccelStructGeomType_Triangles,
+                .geometryFlags = AccelStructGeometryFlagBits_Opaque,
+                .vertexFormat = Format_RGB_F32,
+                .vertexBufferAddress = renderContext_->gpuAddress(vertexBuffer, sizeof(LoadMesh::VertexAttributes) * offset),
+                .vertexStride = sizeof(LoadMesh::VertexAttributes),
+                .numVertices = static_cast<uint32_t>(subMesh.Vertices.size()),
+                .indexFormat = IndexFormat_U32,
+                .indexBufferAddress = renderContext_->gpuAddress(indexBuffer, sizeof(uint32_t) * index_offset),
+                .transformBufferAddress = renderContext_->gpuAddress(transformBufferBLAS),
+                .buildrange = {.primitiveCount = static_cast<uint32_t>(subMesh.indices.size()/3) }
+            };
+            BLAS.push_back(renderContext_->createAccelerationStructure(blasDesc));
+            offset += subMesh.Vertices.size();
+            index_offset += subMesh.indices.size();
+        }
+
+        // Use transform matrices from the glTF nodes and convert to
+        std::vector<glm::mat3x4> transformMatrices;
+        for (auto transform : mesh.transforms) {
+            glm::mat3x4 transformMatrix{};
+            auto m = glm::mat3x4(glm::transpose(transform));
+            memcpy(&transformMatrix, (void*)&m, sizeof(glm::mat3x4));
+            transformMatrices.push_back(transformMatrix);
+        }
+        std::vector<AccelStructInstance> instances;
+        for (int i = 0; i < mesh.m_subMeshes.size(); i++)
+        {
+            SubMesh& subMesh = mesh.m_subMeshes[i];
+            instances.push_back({
+                .transform = transformMatrices[subMesh.meshIndices[0]],
+                .flags = AccelStructInstanceFlagBits_TriangleFacingCullDisable,
+                .accelerationStructureReference = renderContext_->gpuAddress(BLAS[i]),
+                });
+        }
+        
+        BufferDesc instBufferDesc{
+            .usage_type = BufferUsageBits_AccelStructBuildInputReadOnly,
+            .storage_type = StorageType_Device,
+            .size = sizeof(AccelStructInstance) * instances.size(),
+        };
+        instancesBuffer = renderContext_->createBuffer(instBufferDesc);
+
+        instBufferDesc.storage_type = StorageType_HostVisible;
+        Holder<BufferHandle> instanceBufferStaging = renderContext_->createBuffer(instBufferDesc);
+
+        //copy the instances buffer
+        {
+            auto& cmdBuffer = renderContext_->acquireCommandBuffer();
+            cmdBuffer.copyBuffer(instanceBufferStaging, instances.data(), instBufferDesc.size);
+            cmdBuffer.cmdCopyBufferToBuffer(instanceBufferStaging, instancesBuffer);
+            renderContext_->submit(cmdBuffer);
+        }
+
+        AccelStructDesc tlasDesc{
+             .type = AccelStructType_TLAS,
+             .geometryType = AccelStructGeomType_Instances,
+             .instancesBufferAddress = renderContext_->gpuAddress(instancesBuffer),
+             .buildrange = {.primitiveCount = 1},
+             .buildFlags = AccelStructBuildFlagBits_PreferFastTrace | AccelStructBuildFlagBits_AllowUpdate,
+        };
+        TLAS = renderContext_->createAccelerationStructure(tlasDesc);
 
         mesh.clear();
     }

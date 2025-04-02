@@ -25,6 +25,9 @@
     <Filter Include="src\Gaia\Renderer\Vulkan">
       <UniqueIdentifier>{D4DEEE49-C003-3ECA-E94E-235AD5D23CE8}</UniqueIdentifier>
     </Filter>
+    <Filter Include="src\Gaia\Scene">
+      <UniqueIdentifier>{0B505334-F71D-473A-E0B1-B760CC1E239F}</UniqueIdentifier>
+    </Filter>
     <Filter Include="src\Gaia\Window">
       <UniqueIdentifier>{954D83C8-01D9-F08C-0AEA-738176F44C8D}</UniqueIdentifier>
     </Filter>
@@ -192,6 +195,9 @@
     <ClInclude Include="src\Gaia\Log.h">
       <Filter>src\Gaia</Filter>
     </ClInclude>
+    <ClInclude Include="src\Gaia\Material.h">
+      <Filter>src\Gaia</Filter>
+    </ClInclude>
     <ClInclude Include="src\Gaia\Renderer\Cameras\Camera.h">
       <Filter>src\Gaia\Renderer\Cameras</Filter>
     </ClInclude>
@@ -200,6 +206,18 @@
     </ClInclude>
     <ClInclude Include="src\Gaia\Renderer\Cameras\SceneCamera.h">
       <Filter>src\Gaia\Renderer\Cameras</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Gaia\Renderer\GaiaRenderer.h">
+      <Filter>src\Gaia\Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Gaia\Renderer\Pool.h">
+      <Filter>src\Gaia\Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Gaia\Renderer\Renderer.h">
+      <Filter>src\Gaia\Renderer</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Gaia\Renderer\Shadows.h">
+      <Filter>src\Gaia\Renderer</Filter>
     </ClInclude>
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkBootstrap.h">
       <Filter>src\Gaia\Renderer\Vulkan</Filter>
@@ -212,6 +230,15 @@
     </ClInclude>
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkUtils.h">
       <Filter>src\Gaia\Renderer\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Gaia\Renderer\Vulkan\VulkanClasses.h">
+      <Filter>src\Gaia\Renderer\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Gaia\Renderer\Vulkan\volk.h">
+      <Filter>src\Gaia\Renderer\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Gaia\Scene\Scene.h">
+      <Filter>src\Gaia\Scene</Filter>
     </ClInclude>
     <ClInclude Include="src\Gaia\TimeSteps.h">
       <Filter>src\Gaia</Filter>
@@ -1098,13 +1125,6 @@
     <ClInclude Include="vendor\stb_image\stb_image_resize.h">
       <Filter>vendor\stb_image</Filter>
     </ClInclude>
-    <ClInclude Include="src\Gaia\Renderer\Vulkan\VulkanClasses.h" />
-    <ClInclude Include="src\Gaia\Renderer\Pool.h" />
-    <ClInclude Include="src\Gaia\Renderer\GaiaRenderer.h" />
-    <ClInclude Include="src\Gaia\Renderer\Renderer.h" />
-    <ClInclude Include="src\Gaia\Scene\Scene.h" />
-    <ClInclude Include="src\Gaia\Material.h" />
-    <ClInclude Include="src\Gaia\Renderer\Shadows.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Gaia\Application.cpp">
@@ -1128,6 +1148,9 @@
     <ClCompile Include="src\Gaia\Log.cpp">
       <Filter>src\Gaia</Filter>
     </ClCompile>
+    <ClCompile Include="src\Gaia\Material.cpp">
+      <Filter>src\Gaia</Filter>
+    </ClCompile>
     <ClCompile Include="src\Gaia\Renderer\Cameras\Camera.cpp">
       <Filter>src\Gaia\Renderer\Cameras</Filter>
     </ClCompile>
@@ -1137,6 +1160,15 @@
     <ClCompile Include="src\Gaia\Renderer\Cameras\SceneCamera.cpp">
       <Filter>src\Gaia\Renderer\Cameras</Filter>
     </ClCompile>
+    <ClCompile Include="src\Gaia\Renderer\GaiaRenderer.cpp">
+      <Filter>src\Gaia\Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Gaia\Renderer\Renderer.cpp">
+      <Filter>src\Gaia\Renderer</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Gaia\Renderer\Shadows.cpp">
+      <Filter>src\Gaia\Renderer</Filter>
+    </ClCompile>
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkBootstrap.cpp">
       <Filter>src\Gaia\Renderer\Vulkan</Filter>
     </ClCompile>
@@ -1145,6 +1177,12 @@
     </ClCompile>
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkUtils.cpp">
       <Filter>src\Gaia\Renderer\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Gaia\Renderer\Vulkan\VulkanClasses.cpp">
+      <Filter>src\Gaia\Renderer\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Gaia\Scene\Scene.cpp">
+      <Filter>src\Gaia\Scene</Filter>
     </ClCompile>
     <ClCompile Include="src\Gaia\Window.cpp">
       <Filter>src\Gaia</Filter>
@@ -1167,20 +1205,10 @@
     <ClCompile Include="vendor\stb_image\stb_image_resize.cpp">
       <Filter>vendor\stb_image</Filter>
     </ClCompile>
-    <ClCompile Include="src\Gaia\Renderer\Vulkan\VulkanClasses.cpp" />
-    <ClCompile Include="src\Gaia\Renderer\GaiaRenderer.cpp" />
-    <ClCompile Include="src\Gaia\Renderer\Renderer.cpp" />
-    <ClCompile Include="src\Gaia\Scene\Scene.cpp" />
-    <ClCompile Include="src\Gaia\Material.cpp" />
-    <ClCompile Include="src\Gaia\Renderer\Shadows.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="src\Gaia\Renderer\Shaders\vert_shader.vert" />
-    <None Include="src\Gaia\Renderer\Shaders\compile.bat" />
-    <None Include="src\Gaia\Renderer\Shaders\frag_shader.frag" />
-    <None Include="src\Gaia\Renderer\Shaders\frag_shader.spv" />
-    <None Include="src\Gaia\Renderer\Shaders\vert_shader.spv" />
-    <None Include="src\Gaia\Renderer\Shaders\shadow.vert" />
-    <None Include="src\Gaia\Renderer\Shaders\shadow.frag" />
+    <None Include="src\Gaia\Renderer\Shaders\rayGen.rgen" />
+    <None Include="src\Gaia\Renderer\Shaders\rayMiss.rmiss" />
+    <None Include="src\Gaia\Renderer\Shaders\closestHit.rchit" />
   </ItemGroup>
 </Project>

@@ -32,8 +32,8 @@ namespace Gaia
 			depInfo.imageMemoryBarrierCount = 1;
 			depInfo.pImageMemoryBarriers = &imageBarrier;
 
-			vkCmdPipelineBarrier2(cmd, &depInfo);
 
+			vkCmdPipelineBarrier2(cmd, &depInfo);
 		}
 		void copy_image_to_image(VkCommandBuffer cmd, VkImage src, VkImage dst, VkExtent2D srcSize, VkExtent2D dstSize)
 		{

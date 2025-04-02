@@ -8,14 +8,13 @@ GaiaEditor::GaiaEditor()
 {
 	Window& window = Application::Get().GetWindow();
 	scene_ = Gaia::Scene::create(SceneDescriptor{
-		.meshPath = "C:/Users/Subhajit/OneDrive/Documents/bistro_ext.gltf",
+		.meshPath = "C:/Users/Subhajit/OneDrive/Documents/texturedCube.gltf",
 		.windowWidth = window.GetWidth(),
 		.windowHeight = window.GetHeight() 
 		});
 	renderer_ = Gaia::Renderer::create(window.GetNativeWindow(), *scene_);
 	//imp set imgui rendering context.
 	Application::Get().setImGuiRenderingContext(*renderer_->getContext(), renderer_->getRenderTarget());
-	renderer_->createStaticBuffers(*scene_);
 }
 
 void GaiaEditor::OnAttach()

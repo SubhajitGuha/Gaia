@@ -1,8 +1,10 @@
 #include "pch.h"
+#define VOLK_IMPLEMENTATION
 #define VMA_IMPLEMENTATION
 #define VMA_STATIC_VULKAN_FUNCTIONS 0
 #define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
 #include "VulkanClasses.h"
+#include "VkBootstrap.h"
 #include "GLFW/glfw3.h"
 #include "VkUtils.h"
 
@@ -100,6 +102,9 @@ namespace Gaia {
 
 	VulkanContext::VulkanContext(void* window)
 	{
+		VkResult volkres = volkInitialize();
+		GAIA_ASSERT(volkres == VK_SUCCESS, "");
+
 		vkb::InstanceBuilder builder;
 		vkb::Result instance_res = builder.set_app_name("Gaia").
 			enable_validation_layers(enableValidationLayers_).
@@ -115,6 +120,8 @@ namespace Gaia {
 		vkb::Instance vkb_instance = instance_res.value();
 		vkInstance_ = vkb_instance.instance;
 		vkDebugUtilsMessenger_ = vkb_instance.debug_messenger;
+
+		volkLoadInstance(vkInstance_);
 
 		//Create Surface
 		GLFWwindow* glfwWindow = nullptr;
@@ -147,8 +154,9 @@ namespace Gaia {
 			VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
 			VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
 			VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME,
-			VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME
+			VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
 		};
+		VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeature{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR };
 
 		vkb::PhysicalDeviceSelector selector{ vkb_instance };
 		vkb::Result vkb_pd_res = selector.set_minimum_version(1, 3).
@@ -188,11 +196,11 @@ namespace Gaia {
 
 		//vma initilization
 		VmaVulkanFunctions vulkanFunctions = {};
-		vulkanFunctions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
-		vulkanFunctions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;
+		vulkanFunctions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+		vulkanFunctions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
 
 		VmaAllocatorCreateInfo allocatorCreateInfo = {};
-		allocatorCreateInfo.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
+		allocatorCreateInfo.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT | VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
 		allocatorCreateInfo.vulkanApiVersion = VK_API_VERSION_1_2;
 		allocatorCreateInfo.physicalDevice = vkPhysicsalDevice_;
 		allocatorCreateInfo.device = vkDevice_;
@@ -271,8 +279,10 @@ namespace Gaia {
 	}
 	Holder<BufferHandle> VulkanContext::createBuffer(BufferDesc& desc, const char* debugName)
 	{
-		VkBufferUsageFlags usageFlags = desc.storage_type == StorageType_Device? VK_BUFFER_USAGE_TRANSFER_DST_BIT : 0;
+		VkBufferUsageFlags usageFlags = desc.storage_type == StorageType_Device? VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT : 0;
 
+		//if (desc.storage_type != StorageType_HostVisible)
+		usageFlags |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
 		if (desc.storage_type == StorageType_HostVisible)
 		{
 			usageFlags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
@@ -347,11 +357,14 @@ namespace Gaia {
 			vmaMapMemory(getVmaAllocator(), buffer.vmaAllocation_, &buffer.mappedPtr_);
 		}
 
-		VkBufferDeviceAddressInfo bd_ai{
-			.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-			.buffer = buffer.vkBuffer_,
-		};
-		buffer.deviceAddress_ =  vkGetBufferDeviceAddress(vkDevice_, &bd_ai);
+		if (usageFlags & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
+		{
+			VkBufferDeviceAddressInfo bd_ai{
+				.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+				.buffer = buffer.vkBuffer_,
+			};
+			buffer.deviceAddress_ =  vkGetBufferDeviceAddress(vkDevice_, &bd_ai);
+		}
 		BufferHandle bufferHandle = bufferPool_.Create(std::move(buffer));
 		return {this,bufferHandle};
 	}
@@ -713,7 +726,12 @@ namespace Gaia {
 	}
 	Holder<RayTracingPipelineHandle> VulkanContext::createRayTracingPipeline(const RayTracingPipelineDesc& desc)
 	{
-		return Holder<RayTracingPipelineHandle>();
+		RayTracingPipelineState rtps{
+			.desc_ = desc,
+		};
+		RayTracingPipelineHandle handle = rayTracingPipelinePool_.Create(std::move(rtps));
+		getPipeline(handle);
+		return {this, handle};
 	}
 	void VulkanContext::destroy(BufferHandle handle)
 	{
@@ -844,6 +862,13 @@ namespace Gaia {
 		GAIA_ASSERT(buf && buf->deviceAddress_,"");
 
 		return buf ? (uint64_t)buf->deviceAddress_ + offset : 0u;
+	}
+	uint64_t VulkanContext::gpuAddress(AccelStructHandle handle)
+	{
+		VulkanAccelerationStructure* desc = accelStructurePool_.get(handle);
+		GAIA_ASSERT(desc, "");
+
+		return desc->deviceAddress;
 	}
 	VulkanDescriptorSet* VulkanContext::getDescriptorSet(DescriptorSetLayoutHandle handle)
 	{
@@ -1251,7 +1276,7 @@ if(shaderModuleState)\
 		VkAccelerationStructureCreateInfoKHR as_ci{
 			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
 			.pNext = nullptr,
-			.createFlags = getVkAccelStructBuildFlags(desc.buildFlags),
+			.createFlags = 0,
 			.buffer = bufferPool_.get(accelStruct.buffer)->vkBuffer_,
 			.size = accelerationStructureBuildSizesInfo.accelerationStructureSize,
 			.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
@@ -1267,7 +1292,7 @@ if(shaderModuleState)\
 		};
 		Holder<BufferHandle> scratchBuffer = createBuffer(scratchBufferDesc);
 
-		VkAccelerationStructureBuildGeometryInfoKHR accelStructureGeometryInfo{
+		VkAccelerationStructureBuildGeometryInfoKHR accelStructureGeometryInfo_{
 			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
 			.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
 			.flags = getVkAccelStructBuildFlags(desc.buildFlags),
@@ -1287,7 +1312,7 @@ if(shaderModuleState)\
 		VkAccelerationStructureBuildRangeInfoKHR* rangesPtr[] = { &accelStruct.buildRangeInfo };
 		ICommandBuffer& cmdBuffer = acquireCommandBuffer();
 		VulkanCommandBuffer& vkCmdBuf = static_cast<VulkanCommandBuffer&>(cmdBuffer);
-		vkCmdBuildAccelerationStructuresKHR(vkCmdBuf.getVkCommandBuffer(), 1, &accelStructureGeometryInfo, rangesPtr);
+		vkCmdBuildAccelerationStructuresKHR(vkCmdBuf.getVkCommandBuffer(), 1, &accelStructureGeometryInfo_, rangesPtr);
 		submit(cmdBuffer);
 
 		VkAccelerationStructureDeviceAddressInfoKHR add{
@@ -1345,7 +1370,7 @@ if(shaderModuleState)\
 		};
 
 		//define geometry info to get the size of the acceleration structure
-		VkAccelerationStructureBuildGeometryInfoKHR accelStructureGeometryInfo{
+		VkAccelerationStructureBuildGeometryInfoKHR accelStructureGeometryInfo_{
 			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
 			.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
 			.flags = getVkAccelStructBuildFlags(desc.buildFlags),
@@ -1358,7 +1383,7 @@ if(shaderModuleState)\
 		};
 		vkGetAccelerationStructureBuildSizesKHR(vkDevice_,
 			VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
-			&accelStructureGeometryInfo,
+			&accelStructureGeometryInfo_,
 			&desc.buildrange.primitiveCount,
 			&accelerationStructureBuildSizesInfo);
 
@@ -1383,7 +1408,7 @@ if(shaderModuleState)\
 		VkAccelerationStructureCreateInfoKHR as_ci{
 			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
 			.pNext = nullptr,
-			.createFlags = getVkAccelStructBuildFlags(desc.buildFlags),
+			.createFlags = 0,
 			.buffer = bufferPool_.get(accelStruct.buffer)->vkBuffer_,
 			.size = accelerationStructureBuildSizesInfo.accelerationStructureSize,
 			.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
@@ -2631,6 +2656,19 @@ if(shaderModuleState)\
 	}*/
 	void VulkanDescriptorSet::write(DescriptorSetLayoutDesc& desc, VulkanContext& ctx_)
 	{
+		//acceleration structure if present
+		VulkanAccelerationStructure* accelStructure = ctx_.accelStructurePool_.get(desc.accelStructure);
+		if (desc.descriptorType == DescriptorType_AccelerationStructure)
+		{
+			GAIA_ASSERT(accelStructure, "Descriptor type is Acceleration structure but accelStructure is nullptr");
+		}
+
+		accelStructWrite = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
+			.accelerationStructureCount = desc.descriptorCount,
+			.pAccelerationStructures = accelStructure? &accelStructure->vkAccelStructure: nullptr, //For now support one tlas acceleration structure
+		};
+
 		VulkanSampler* sampler = ctx_.samplerPool_.get(desc.sampler);
 
 		if(desc.descriptorType == DescriptorType_SampledImage)
@@ -2701,6 +2739,7 @@ if(shaderModuleState)\
 		VkWriteDescriptorSet write{};
 
 		write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		write.pNext = accelStructure ? &accelStructWrite : nullptr;
 		write.descriptorCount = desc.descriptorCount;
 		write.write = VK_NULL_HANDLE;
 		write.pImageInfo = desc.texture.empty()? VK_NULL_HANDLE: &imageInfo[totalDescriptorCount];
