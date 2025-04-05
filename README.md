@@ -16,6 +16,11 @@ Features I plan to implement next:-
 * Implement different lights directional, point, spot, area.
 
 Some screen-shots of my renderer at current state.
-![Screenshot 2025-03-19 213137](https://github.com/user-attachments/assets/59b1b77f-639e-45f6-b0dd-3056f68041a7)
 
-![Screenshot 2025-03-20 103405](https://github.com/user-attachments/assets/37536bb8-6231-4f09-8480-8f482c515944)
+path-trace render using hardware accelerated ray-tracing.
+![Screenshot (26)](https://github.com/user-attachments/assets/cda92d47-5ba5-4885-b239-18ac18fa3699)
+
+![Screenshot (27)](https://github.com/user-attachments/assets/0925805e-637d-4bed-94dc-f2b6d5687186)
+
+Cascaded Shadow Mapping.
+![Screenshot 2025-03-28 121310](https://github.com/user-attachments/assets/b5763a37-120b-45d4-9bde-8449f2731fbf)
