@@ -388,10 +388,12 @@ namespace Gaia {
 		void cmdPushConstants(const void* data, size_t size, size_t offset) override;
 
 		void cmdBindGraphicsDescriptorSets(uint32_t firstSet, RenderPipelineHandle pipeline, const std::vector<DescriptorSetLayoutHandle>& descriptorSetLayouts);
+		void cmdBindRayTracingDescriptorSets(uint32_t firstSet, RayTracingPipelineHandle pipeline, const std::vector<DescriptorSetLayoutHandle>& descriptorSetLayouts);
 
 		void cmdDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override;
 		void cmdDrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, uint32_t vertexOffset, uint32_t firstInstance) override;
 
+		void cmdBlitImage(TextureHandle srcImage, TextureHandle dstImage);
 		VkCommandBuffer getVkCommandBuffer() {
 			return commandBufferWraper_->cmdBuffer_;
 		}

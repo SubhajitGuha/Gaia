@@ -1037,10 +1037,17 @@ namespace Gaia {
 
 		RayTracingPipelineDesc& desc = rtps->desc_;
 
+		uint32_t numMissShaders = desc.getNumMissShaders();
+		std::vector<ShaderModuleState*> mMiss(numMissShaders);
+		for (int i = 0; i < numMissShaders; i++)
+		{
+			mMiss[i] = shaderModulePool_.get(desc.smMiss[i]);
+		}
+
 		ShaderModuleState* mRgen = shaderModulePool_.get(desc.smRayGen);
 		ShaderModuleState* mAHit = shaderModulePool_.get(desc.smAnyHit);
 		ShaderModuleState* mCHit = shaderModulePool_.get(desc.smClosestHit);
-		ShaderModuleState* mMiss = shaderModulePool_.get(desc.smMiss);
+		//ShaderModuleState* mMiss = shaderModulePool_.get(desc.smMiss);
 		ShaderModuleState* mInter = shaderModulePool_.get(desc.smIntersection);
 		ShaderModuleState* mCall = shaderModulePool_.get(desc.smCallable);
 
@@ -1064,7 +1071,8 @@ if(shaderModuleState)\
 	ciShaderStages[numShaderStages++] = vkutil::getPipelineShaderStageCreateInfo(vkShaderStage, shaderModuleState->sm, "main", nullptr);
 
 		ADD_STAGE(mRgen, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-		ADD_STAGE(mMiss, VK_SHADER_STAGE_MISS_BIT_KHR);
+		for(int i=0;i<numMissShaders;i++)
+			ADD_STAGE(mMiss[i], VK_SHADER_STAGE_MISS_BIT_KHR);
 		ADD_STAGE(mCHit, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
 		ADD_STAGE(mAHit, VK_SHADER_STAGE_ANY_HIT_BIT_KHR);
 		ADD_STAGE(mInter, VK_SHADER_STAGE_INTERSECTION_BIT_KHR);
@@ -1091,18 +1099,23 @@ if(shaderModuleState)\
 				.intersectionShader = VK_SHADER_UNUSED_KHR,
 			};
 		}
-		if (mMiss)
+		//multiple miss shaders
+		for(int i=0;i<numMissShaders;i++)
 		{
-			//general group miss
-			idxMiss = numShaders;
-			shaderGroups[numShaderGroups++] = VkRayTracingShaderGroupCreateInfoKHR{
-				.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
-				.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
-				.generalShader = numShaders++,
-				.closestHitShader = VK_SHADER_UNUSED_KHR,
-				.anyHitShader = VK_SHADER_UNUSED_KHR,
-				.intersectionShader = VK_SHADER_UNUSED_KHR,
-			};
+			if (mMiss[i])
+			{
+				//general group miss
+				if (i == 0)
+					idxMiss = numShaders;
+				shaderGroups[numShaderGroups++] = VkRayTracingShaderGroupCreateInfoKHR{
+					.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+					.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+					.generalShader = numShaders++,
+					.closestHitShader = VK_SHADER_UNUSED_KHR,
+					.anyHitShader = VK_SHADER_UNUSED_KHR,
+					.intersectionShader = VK_SHADER_UNUSED_KHR,
+				};
+			}
 		}
 		//hit group for now triangle hit group
 		if (mCHit || mAHit || mInter)
@@ -1167,9 +1180,15 @@ if(shaderModuleState)\
 
 		// repack SBT respecting `shaderGroupBaseAlignment`
 		std::vector<uint8_t> sbtStorage(sbtBufferSize);
-		for (uint32_t i = 0; i != numShaderGroups; i++) {
+		/*for (uint32_t i = 0; i != numShaderGroups; i++) {
 			memcpy(sbtStorage.data() + i * sbtEntrySizeAligned, shaderHandleStorage.data() + i * handleSizeAligned, handleSize);
-		}
+		}*/
+		//rayGen
+		memcpy(sbtStorage.data() + 0 * sbtEntrySizeAligned, shaderHandleStorage.data() + 0 * handleSizeAligned, handleSize);
+		//miss
+		memcpy(sbtStorage.data() + idxMiss * sbtEntrySizeAligned, shaderHandleStorage.data() + idxMiss * handleSizeAligned, handleSize * numMissShaders);
+		//hit
+		memcpy(sbtStorage.data() + idxHit * sbtEntrySizeAligned, shaderHandleStorage.data() + idxHit * handleSizeAligned, handleSize);
 
 		BufferDesc sbtBuffDesc{
 			.usage_type = BufferUsageBits_ShaderBindingTable,
@@ -1197,7 +1216,7 @@ if(shaderModuleState)\
 		rtps->sbtEntryMiss = {
 			.deviceAddress = idxMiss ? gpuAddress(rtps->sbt , idxMiss * sbtEntrySizeAligned) : 0,
 			.stride = handleSizeAligned,
-			.size = handleSizeAligned,
+			.size = handleSizeAligned * numMissShaders,
 		};
 
 		rtps->sbtEntryHit = {
@@ -2671,7 +2690,7 @@ if(shaderModuleState)\
 
 		VulkanSampler* sampler = ctx_.samplerPool_.get(desc.sampler);
 
-		if(desc.descriptorType == DescriptorType_SampledImage)
+		if(desc.descriptorType == DescriptorType_SampledImage || desc.descriptorType == DescriptorType_StorageImage)
 		{
 
 			GAIA_ASSERT(!desc.texture.empty(), "textures array in descriptor description is empty");
@@ -3046,6 +3065,19 @@ if(shaderModuleState)\
 
 		vkCmdBindDescriptorSets(commandBufferWraper_->cmdBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, rps->pipelineLayout_, firstSet, (uint32_t)descriptorSetLayouts.size(), vkDescSets.data(), 0, nullptr);
 	}
+	void VulkanCommandBuffer::cmdBindRayTracingDescriptorSets(uint32_t firstSet, RayTracingPipelineHandle pipeline, const std::vector<DescriptorSetLayoutHandle>& descriptorSetLayouts)
+	{
+		RayTracingPipelineState* rtps = ctx_->rayTracingPipelinePool_.get(pipeline);
+		std::vector<VkDescriptorSet> vkDescSets(descriptorSetLayouts.size());
+		for (int i = 0; i < descriptorSetLayouts.size(); i++)
+		{
+			VulkanDescriptorSet* set = ctx_->descriptorSetPool_.get(descriptorSetLayouts[i]);
+			vkDescSets[i] = set->set_;
+		}
+
+		vkCmdBindDescriptorSets(commandBufferWraper_->cmdBuffer_, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, rtps->pipelineLayout_, firstSet, (uint32_t)descriptorSetLayouts.size(), vkDescSets.data(), 0, nullptr);
+	}
+
 	void VulkanCommandBuffer::cmdDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
 	{
 		vkCmdDraw(commandBufferWraper_->cmdBuffer_, vertexCount, instanceCount, firstVertex, firstInstance);
@@ -3053,5 +3085,32 @@ if(shaderModuleState)\
 	void VulkanCommandBuffer::cmdDrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, uint32_t vertexOffset, uint32_t firstInstance)
 	{
 		vkCmdDrawIndexed(commandBufferWraper_->cmdBuffer_, indexCount, instanceCount, firstInstance, vertexOffset, firstInstance);
+	}
+	void VulkanCommandBuffer::cmdBlitImage(TextureHandle srcImageHandle, TextureHandle dstImageHandle)
+	{
+		VulkanImage* srcImage = ctx_->texturesPool_.get(srcImageHandle);
+		VulkanImage* dstImage = ctx_->texturesPool_.get(dstImageHandle);
+
+		VkImageBlit2 imageBlit{
+		.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
+		.srcSubresource = {.aspectMask = srcImage->getImageAspectFlags(), .mipLevel = 0, .baseArrayLayer =0, .layerCount= 1},
+		.dstSubresource = {.aspectMask = dstImage->getImageAspectFlags(), .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1}
+		};
+		imageBlit.srcOffsets[0] = VkOffset3D{0,0,0};
+		imageBlit.srcOffsets[1] = VkOffset3D{ (int)srcImage->vkExtent_.width, (int)srcImage->vkExtent_.height,1 };
+
+		imageBlit.dstOffsets[0] = VkOffset3D{0,0,0};
+		imageBlit.dstOffsets[1] = VkOffset3D{ (int)dstImage->vkExtent_.width, (int)dstImage->vkExtent_.height,1 };
+
+		VkBlitImageInfo2 blitInfo{
+			.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2,
+			.srcImage = srcImage->vkImage_,
+			.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			.dstImage = dstImage->vkImage_,
+			.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			.regionCount = 1,
+			.pRegions = &imageBlit
+		};
+		vkCmdBlitImage2(commandBufferWraper_->cmdBuffer_, &blitInfo);
 	}
 }

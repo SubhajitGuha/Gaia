@@ -3,6 +3,8 @@
 #include "Gaia/Scene/Scene.h"
 #include "Gaia/Renderer/Vulkan/VulkanClasses.h"
 #include "Shadows.h"
+#include "Gaia/Input.h"
+#include "Gaia/Application.h"
 
 namespace fs = std::filesystem;
 namespace Gaia
@@ -56,6 +58,22 @@ namespace Gaia
             .storage = StorageType_Device,
         };
         renderTarget_ = renderContext_->createTexture(rtDesc);
+
+        TextureDesc rayTracingTexDesc{
+            .type = TextureType_2D,
+            .format = Format_RGBA_F32,
+            .dimensions = {windowSize.first, windowSize.second, 1},
+            .usage = TextureUsageBits_Storage,
+            .storage = StorageType_Device,
+        };
+        rtOutputTexture = renderContext_->createTexture(rayTracingTexDesc);
+
+        //change the image layout to general
+        {
+            ICommandBuffer& cmdBuf = renderContext_->acquireCommandBuffer();
+            cmdBuf.cmdTransitionImageLayout(rtOutputTexture, ImageLayout_GENERAL);
+            renderContext_->submit(cmdBuf);
+        }
 
         createGpuMeshTexturesAndBuffers(scene);
 
@@ -231,13 +249,15 @@ namespace Gaia
 
         ShaderModuleDesc rayGenShaderDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/rayGen.rgen.spv", Stage_RayGen);
         ShaderModuleDesc missShaderDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/rayMiss.rmiss.spv", Stage_Miss);
+        ShaderModuleDesc shadowMissShaderDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/shadowMiss.rmiss.spv", Stage_Miss);
         ShaderModuleDesc closestHitShaderDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/closestHit.rchit.spv", Stage_ClosestHit);
 
         rayGenShaderModule = renderContext_->createShaderModule(rayGenShaderDesc);
         missShaderModule = renderContext_->createShaderModule(missShaderDesc);
+        shadowMissShaderModule = renderContext_->createShaderModule(shadowMissShaderDesc);
         closestHitShaderModule = renderContext_->createShaderModule(closestHitShaderDesc);
 
-        std::vector<DescriptorSetLayoutDesc> accelStructDSL{
+        std::vector<DescriptorSetLayoutDesc> accelStructDSLDesc{
              DescriptorSetLayoutDesc{
               .binding = 0,
               .descriptorCount = 1,
@@ -246,14 +266,39 @@ namespace Gaia
               .accelStructure = TLAS
             },
         };
-        accelStructureDescSetLayout = renderContext_->createDescriptorSetLayout(accelStructDSL);
+        accelStructureDescSetLayout = renderContext_->createDescriptorSetLayout(accelStructDSLDesc);
         
+        std::vector<DescriptorSetLayoutDesc> geometryBufferAddressDSLDesc{
+            DescriptorSetLayoutDesc{
+             .binding = 0,
+             .descriptorCount = 1,
+             .descriptorType = DescriptorType_StorageBuffer,
+             .shaderStage = Stage_Frag | Stage_Vert | Stage_RayGen | Stage_ClosestHit,
+             .buffer = DescriptorSetLayoutDesc::getResource<BufferHandle>(geometryBufferAddress),
+           },
+           DescriptorSetLayoutDesc{
+             .binding = 1,
+             .descriptorCount = 1,
+             .descriptorType = DescriptorType_StorageImage,
+             .shaderStage = Stage_Frag | Stage_Vert | Stage_RayGen | Stage_ClosestHit,
+             .texture = DescriptorSetLayoutDesc::getResource<TextureHandle>(rtOutputTexture),
+           },
+        };
+
+        geometryBufferAddressDescSetLayout = renderContext_->createDescriptorSetLayout(geometryBufferAddressDSLDesc);
+
         RayTracingPipelineDesc rtpd{
             .smRayGen = rayGenShaderModule,
             .smClosestHit = closestHitShaderModule,
-            .smMiss = missShaderModule,
         };
+        rtpd.smMiss[0] = missShaderModule;
+        rtpd.smMiss[1] = shadowMissShaderModule;
+
         rtpd.descriptorSetLayout[0] = accelStructureDescSetLayout;
+        rtpd.descriptorSetLayout[1] = geometryBufferAddressDescSetLayout;
+        rtpd.descriptorSetLayout[2] = mvpMatrixDescriptorSetLayout;
+        rtpd.descriptorSetLayout[3] = meshDescriptorSet;
+
         rtPipeline = renderContext_->createRayTracingPipeline(rtpd);
 
     }
@@ -376,6 +421,7 @@ namespace Gaia
 
         std::vector<LoadMesh::VertexAttributes> buffer;
         std::vector<uint32_t> indicesBuffer;
+        std::vector<uint32_t> indicesBufferRT;
 
         int totalIndices = 0;
         for (int k = 0; k < mesh.m_subMeshes.size(); k++)
@@ -391,6 +437,7 @@ namespace Gaia
             for (int i = 0; i < subMesh.indices.size(); i++)
             {  
                 indicesBuffer.push_back(subMesh.indices[i] + totalIndices); //offset the indices
+                indicesBufferRT.push_back(subMesh.indices[i]); //for RT indices I dont offset the indices
             }
             totalIndices += subMesh.Vertices.size();
         }
@@ -408,6 +455,7 @@ namespace Gaia
             .size = indicesBuffer.size() * sizeof(uint32_t),
         };
         indexBuffer = renderContext_->createBuffer(indexBufferDesc);
+        indexBufferRT = renderContext_->createBuffer(indexBufferDesc); //buffer sizes are same
 
         //create temporary staging buffers
         vertexBufferDesc.storage_type = StorageType_HostVisible;
@@ -415,6 +463,7 @@ namespace Gaia
 
         indexBufferDesc.storage_type = StorageType_HostVisible;
         Holder<BufferHandle> indexbufferStaging = renderContext_->createBuffer(indexBufferDesc);
+        Holder<BufferHandle> indexbufferStagingRT = renderContext_->createBuffer(indexBufferDesc);
 
         numIndicesPerMesh = indicesBuffer.size();
 
@@ -423,8 +472,11 @@ namespace Gaia
             ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
             cmdBuffer.copyBuffer(vertexBufferStaging, buffer.data(), vertexBufferDesc.size);
             cmdBuffer.copyBuffer(indexbufferStaging, indicesBuffer.data(), indexBufferDesc.size);
+            cmdBuffer.copyBuffer(indexbufferStagingRT, indicesBufferRT.data(), indexBufferDesc.size);
+
             cmdBuffer.cmdCopyBufferToBuffer(vertexBufferStaging, vertexBuffer);
             cmdBuffer.cmdCopyBufferToBuffer(indexbufferStaging, indexBuffer);
+            cmdBuffer.cmdCopyBufferToBuffer(indexbufferStagingRT, indexBufferRT);
             renderContext_->submit(cmdBuffer);
         }
 
@@ -442,7 +494,8 @@ namespace Gaia
             renderContext_->submit(cmdBuffer);
         }
 
-        //create blas for every sub meshes
+        std::vector<MeshGPUBufferAddress> gpuAddresses;
+        //create blas for every sub meshes and also record the gpu addresses
         uint32_t offset = 0;
         uint32_t index_offset = 0;
         for (int k = 0; k < mesh.m_subMeshes.size(); k++)
@@ -457,15 +510,35 @@ namespace Gaia
                 .vertexStride = sizeof(LoadMesh::VertexAttributes),
                 .numVertices = static_cast<uint32_t>(subMesh.Vertices.size()),
                 .indexFormat = IndexFormat_U32,
-                .indexBufferAddress = renderContext_->gpuAddress(indexBuffer, sizeof(uint32_t) * index_offset),
+                .indexBufferAddress = renderContext_->gpuAddress(indexBufferRT, sizeof(uint32_t) * index_offset),
                 .transformBufferAddress = renderContext_->gpuAddress(transformBufferBLAS),
-                .buildrange = {.primitiveCount = static_cast<uint32_t>(subMesh.indices.size()/3) }
+                .buildrange = {.primitiveCount = static_cast<uint32_t>(subMesh.indices.size()/3) },
+                .buildFlags = AccelStructBuildFlagBits_PreferFastTrace
             };
+            gpuAddresses.push_back({.vertexBufferAddress = blasDesc.vertexBufferAddress, .indexBufferAddress=blasDesc.indexBufferAddress});
             BLAS.push_back(renderContext_->createAccelerationStructure(blasDesc));
             offset += subMesh.Vertices.size();
             index_offset += subMesh.indices.size();
         }
 
+        //copy the gpuAddresses buffer
+        BufferDesc gpuAddBufferDesc{
+            .usage_type = BufferUsageBits_Storage,
+            .storage_type = StorageType_Device,
+            .size = gpuAddresses.size() * sizeof(MeshGPUBufferAddress),
+        };
+        geometryBufferAddress = renderContext_->createBuffer(gpuAddBufferDesc);
+
+        gpuAddBufferDesc.storage_type = StorageType_HostVisible;
+        Holder<BufferHandle> geometryBufferAddStaging = renderContext_->createBuffer(gpuAddBufferDesc);
+
+        {
+            ICommandBuffer& cmdBuf = renderContext_->acquireCommandBuffer();
+            cmdBuf.copyBuffer(geometryBufferAddStaging, gpuAddresses.data(), gpuAddBufferDesc.size);
+            cmdBuf.cmdCopyBufferToBuffer(geometryBufferAddStaging, geometryBufferAddress);
+            renderContext_->submit(cmdBuf);
+        }
+        
         // Use transform matrices from the glTF nodes and convert to
         std::vector<glm::mat3x4> transformMatrices;
         for (auto transform : mesh.transforms) {
@@ -507,7 +580,7 @@ namespace Gaia
              .type = AccelStructType_TLAS,
              .geometryType = AccelStructGeomType_Instances,
              .instancesBufferAddress = renderContext_->gpuAddress(instancesBuffer),
-             .buildrange = {.primitiveCount = 1},
+             .buildrange = {.primitiveCount = static_cast<uint32_t>(instances.size())},
              .buildFlags = AccelStructBuildFlagBits_PreferFastTrace | AccelStructBuildFlagBits_AllowUpdate,
         };
         TLAS = renderContext_->createAccelerationStructure(tlasDesc);
@@ -516,6 +589,8 @@ namespace Gaia
     }
     void Renderer::update(Scene& scene)
     {
+        if (Input::IsButtonPressed(0) || Input::IsButtonPressed(1) || Input::IsButtonPressed(2))
+            Application::frameNum = 0;
         shadows_->update(scene);
 
         LoadMesh& mesh = scene.getMesh();
@@ -525,16 +600,19 @@ namespace Gaia
         mvpData.projection = camera.GetProjectionMatrix();
         mvpData.viewDir = camera.GetViewDirection();
         mvpData.camPos = camera.GetCameraPosition();
+        mvpData.frameNumber = Application::frameNum;
 
-        ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
-        cmdBuffer.copyBuffer(mvpBufferStaging, &mvpData, sizeof(MVPMatrices));
-        cmdBuffer.copyBuffer(lightParameterBufferStaging, &scene.lightParameter.color, sizeof(LightParameters));
-        cmdBuffer.copyBuffer(lightMatricesBufferStaging, &shadows_->lightData_[0], sizeof(LightData) * MAX_SHADOW_CASCADES);
+        {
+            ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
+            cmdBuffer.copyBuffer(mvpBufferStaging, &mvpData, sizeof(MVPMatrices));
+            cmdBuffer.copyBuffer(lightParameterBufferStaging, &scene.lightParameter.color, sizeof(LightParameters));
+            cmdBuffer.copyBuffer(lightMatricesBufferStaging, &shadows_->lightData_[0], sizeof(LightData) * MAX_SHADOW_CASCADES);
 
-        cmdBuffer.cmdCopyBufferToBuffer(mvpBufferStaging, mvpBuffer);
-        cmdBuffer.cmdCopyBufferToBuffer(lightParameterBufferStaging, lightParameterBuffer);
-        cmdBuffer.cmdCopyBufferToBuffer(lightMatricesBufferStaging, lightMatricesBuffer);
-        renderContext_->submit(cmdBuffer);
+            cmdBuffer.cmdCopyBufferToBuffer(mvpBufferStaging, mvpBuffer);
+            cmdBuffer.cmdCopyBufferToBuffer(lightParameterBufferStaging, lightParameterBuffer);
+            cmdBuffer.cmdCopyBufferToBuffer(lightMatricesBufferStaging, lightMatricesBuffer);
+            renderContext_->submit(cmdBuffer);
+        }
 
     }
 
@@ -545,37 +623,64 @@ namespace Gaia
     void Renderer::render(Scene& scene)
     {
         shadows_->render(scene);
+        auto windowSize = renderContext_->getWindowSize();
+        //hardware acc ray tracing
+        {
+            ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
+            cmdBuffer.cmdTransitionImageLayout(rtOutputTexture, ImageLayout_GENERAL);
+            cmdBuffer.cmdBindRayTracingPipeline(rtPipeline);
+            cmdBuffer.cmdBindRayTracingDescriptorSets(0, rtPipeline, { accelStructureDescSetLayout, geometryBufferAddressDescSetLayout, mvpMatrixDescriptorSetLayout, meshDescriptorSet });
+            cmdBuffer.cmdTraceRays(windowSize.first, windowSize.second, 1, rtPipeline);
+            renderContext_->submit(cmdBuffer);
+        }
+        if(Application::frameNum == 0)
+        {
+            ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
+            cmdBuffer.cmdTransitionImageLayout(rtOutputTexture, ImageLayout_TRANSFER_SRC_OPTIMAL);
+            cmdBuffer.cmdTransitionImageLayout(renderTarget_, ImageLayout_TRANSFER_DST_OPTIMAL);
+            cmdBuffer.cmdBlitImage(rtOutputTexture, renderTarget_);
+            renderContext_->submit(cmdBuffer);
+        }
+        else 
+        {
+            ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
+            cmdBuffer.cmdTransitionImageLayout(rtOutputTexture, ImageLayout_TRANSFER_SRC_OPTIMAL);
+            cmdBuffer.cmdTransitionImageLayout(renderTarget_, ImageLayout_TRANSFER_DST_OPTIMAL);
+            cmdBuffer.cmdBlitImage(rtOutputTexture, renderTarget_);
+            renderContext_->submit(cmdBuffer);
+        }
+        //{
+        //    ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
+        //    cmdBuffer.cmdTransitionImageLayout(renderTarget_, ImageLayout_COLOR_ATTACHMENT_OPTIMAL);
+        //    cmdBuffer.cmdTransitionImageLayout(depthAttachment, ImageLayout_DEPTH_ATTACHMENT_OPTIMAL);
+        //    ClearValue clearVal = {
+        //     .colorValue = {0.3,0.3,0.3,1.0},
+        //     .depthClearValue = 1.0,
+        //    };
+        //    cmdBuffer.cmdBeginRendering(renderTarget_, depthAttachment, &clearVal);
+        //    cmdBuffer.cmdBindGraphicsPipeline(renderPipeline);
+        //    std::pair<uint32_t, uint32_t> windowDimensions = renderContext_->getWindowSize();
+        //    cmdBuffer.cmdSetViewport(Viewport{
+        //        .width = (float)windowDimensions.first,
+        //        .height = (float)windowDimensions.second,
+        //        .minDepth = 0.0,
+        //        .maxDepth = 1.0 });
+        //    cmdBuffer.cmdSetScissor(Scissor{
+        //        .width = windowDimensions.first,
+        //        .height = windowDimensions.second,
+        //        });
+        //    cmdBuffer.cmdBindGraphicsDescriptorSets(0, renderPipeline, { mvpMatrixDescriptorSetLayout, meshDescriptorSet, shadowDescSetLayout });
+        //    //draw the batched mesh
+        //    {
+        //        cmdBuffer.cmdBindVertexBuffer(0, vertexBuffer, 0);
+        //        cmdBuffer.cmdBindIndexBuffer(indexBuffer, IndexFormat_U32, 0);
 
-       //TextureHandle swapchainImageHandle = renderContext_->getCurrentSwapChainTexture();
-       ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
-       cmdBuffer.cmdTransitionImageLayout(renderTarget_, ImageLayout_COLOR_ATTACHMENT_OPTIMAL);
-       cmdBuffer.cmdTransitionImageLayout(depthAttachment, ImageLayout_DEPTH_ATTACHMENT_OPTIMAL);
-       ClearValue clearVal = {
-        .colorValue = {0.3,0.3,0.3,1.0},
-        .depthClearValue = 1.0,
-       };
-       cmdBuffer.cmdBeginRendering(renderTarget_, depthAttachment, &clearVal);
-       cmdBuffer.cmdBindGraphicsPipeline(renderPipeline);
-       std::pair<uint32_t, uint32_t> windowDimensions = renderContext_->getWindowSize();
-       cmdBuffer.cmdSetViewport(Viewport{
-           .width = (float)windowDimensions.first,
-           .height = (float)windowDimensions.second,
-           .minDepth = 0.0,
-           .maxDepth = 1.0 });
-       cmdBuffer.cmdSetScissor(Scissor{
-           .width = windowDimensions.first,
-           .height = windowDimensions.second,
-           });
-       cmdBuffer.cmdBindGraphicsDescriptorSets(0, renderPipeline, {mvpMatrixDescriptorSetLayout, meshDescriptorSet, shadowDescSetLayout});
-        //draw the batched mesh
-       {
-           cmdBuffer.cmdBindVertexBuffer(0, vertexBuffer, 0);
-           cmdBuffer.cmdBindIndexBuffer(indexBuffer, IndexFormat_U32, 0);
+        //        cmdBuffer.cmdDrawIndexed(numIndicesPerMesh, 1, 0, 0, 0);
+        //    }
+        //    cmdBuffer.cmdEndRendering();
+        //    renderContext_->submit(cmdBuffer);
+        //}
 
-           cmdBuffer.cmdDrawIndexed(numIndicesPerMesh, 1, 0, 0, 0);
-       }
-       cmdBuffer.cmdEndRendering();
-       renderContext_->submit(cmdBuffer);
     }
 
 }

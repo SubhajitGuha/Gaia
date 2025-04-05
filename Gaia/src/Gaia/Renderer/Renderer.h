@@ -13,7 +13,13 @@ namespace Gaia
 		glm::vec3 viewDir = { 0.0,1.0,0.0 };
 		float pad_1 = 0.0;
 		glm::vec3 camPos = { 0.0,0.0,0.0 };
-		float pad_2 = 0.0;
+		uint32_t frameNumber = 0;
+	};
+
+	struct MeshGPUBufferAddress
+	{
+		uint64_t vertexBufferAddress;
+		uint64_t indexBufferAddress;
 	};
 
 	class Renderer
@@ -35,18 +41,21 @@ namespace Gaia
 		explicit Renderer(void* window, Scene& scene);
 		~Renderer();
 	private:
-
 		std::unique_ptr<IContext> renderContext_;
 		uint32_t numIndicesPerMesh;
 
 		//render the entire scene into this texture
 		Holder<TextureHandle> renderTarget_;
+		Holder<TextureHandle> rtOutputTexture; //storage texture that stores the ray-tracing output
 
 		Holder<RenderPipelineHandle> renderPipeline;
 		Holder<RayTracingPipelineHandle> rtPipeline;
+		//Holder<RayTracingPipelineHandle> fullScreenPipeline;
+
 		std::vector<Holder<AccelStructHandle>> BLAS;
 		Holder<AccelStructHandle> TLAS;
-		Holder<BufferHandle> instancesBuffer;
+		Holder<BufferHandle> instancesBuffer; //its the tlas instance buffer
+		Holder<BufferHandle> geometryBufferAddress; //buffer of vertex and index buffer gpu addresses
 
 		Holder<ShaderModuleHandle> vertexShaderModule;
 		Holder<ShaderModuleHandle> fragmentShaderModule;
@@ -54,6 +63,7 @@ namespace Gaia
 		Holder<ShaderModuleHandle> closestHitShaderModule;
 		Holder<ShaderModuleHandle> anyHitShaderModule;
 		Holder<ShaderModuleHandle> missShaderModule;
+		Holder<ShaderModuleHandle> shadowMissShaderModule;
 
 		Holder<BufferHandle> mvpBuffer;
 		Holder<BufferHandle> mvpBufferStaging;
@@ -65,6 +75,8 @@ namespace Gaia
 
 		Holder<BufferHandle> vertexBuffer;
 		Holder<BufferHandle> indexBuffer;
+		Holder<BufferHandle> indexBufferRT; //need a seperate index buffer with out the offset applied for ray tracing
+
 		Holder<TextureHandle> depthAttachment;
 		std::vector<Holder<TextureHandle>> glTfTextures;
 		Holder<BufferHandle> materialsBuffer;
@@ -76,6 +88,7 @@ namespace Gaia
 		Holder<DescriptorSetLayoutHandle> meshDescriptorSet;
 		Holder<DescriptorSetLayoutHandle> shadowDescSetLayout;
 		Holder<DescriptorSetLayoutHandle> accelStructureDescSetLayout;
+		Holder<DescriptorSetLayoutHandle> geometryBufferAddressDescSetLayout;
 
 		MVPMatrices mvpData = {};
 

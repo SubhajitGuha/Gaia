@@ -18,6 +18,7 @@ with out std::bind it is not possible to call OnEvent with an argument while als
 namespace Gaia {
 
 	Application* Application::getApplication;
+	uint32_t Application::frameNum = 0;
 	TimeStep Application::deltaTime(0.0);
 	Application::Application()
 	{
@@ -46,6 +47,8 @@ namespace Gaia {
 		/*dispach.Dispatch<WindowResizeEvent>([](WindowResizeEvent e) {
 			Renderer::WindowResize(e.GetWidth(), e.GetHeight());
 			return false; });*/
+		dispach.Dispatch<KeyPressedEvent>([&](KeyPressedEvent& e) {frameNum = 0;  return true; });
+		dispach.Dispatch<MouseButtonPressed>([&](MouseButtonPressed& e) {frameNum = 0; return true; });
 
 		GAIA_CORE_TRACE(e);
 		for (auto it = m_layerstack.end(); it != m_layerstack.begin();)
@@ -79,7 +82,6 @@ namespace Gaia {
 	{
 		while (m_Running) //render loop
 		{
-
 			m_window->OnUpdate();
 
 			float time = glfwGetTime();
@@ -96,7 +98,7 @@ namespace Gaia {
 			for (Layer* layer : m_layerstack)
 				layer->OnImGuiRender();
 			m_ImGuiLayer->End();
-
+			frameNum++;
 		}
 		m_ImGuiLayer->OnDetach();
 	}

@@ -1,10 +1,137 @@
 #version 460
 #extension GL_EXT_ray_tracing : enable
 #extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_nonuniform_qualifier : enable
 
-layout(binding = 0, set = 0) uniform accelerationStructureEXT topLevelAS;
+layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
+layout(set = 1, binding = 0) buffer readonly geometryBufferAddressLayout{
+	uint64_t vertexBufferAddress;
+	uint64_t indexBufferAddress;
+}bufferAddress[];
+layout(set = 1, binding = 1, rgba32f) uniform image2D image;
 
+layout(set = 2, binding = 0) uniform Camera
+{
+    mat4 view;
+    mat4 projection;
+	vec3 viewDir;
+	vec3 camPos;
+	uint frameNumber;
+} cameraBuffer;
+layout(set = 2, binding = 1) buffer readonly transformLayout
+{
+    mat4 model[];
+} transforms;
+layout(set = 2, binding = 2) uniform LightParameters
+{
+	vec3 color;
+	float intensity;
+	vec3 direction;
+} lightParameters;
+
+layout(set = 3, binding = 0) readonly buffer materialLayout
+{
+	vec4 baseColorFactor;
+	float metallicFactor;
+	float roughnessFactor;
+	float normalStrength;
+
+	int baseColorTexture;
+	int metallicRoughnessTexture;
+	int normalTexture;
+} materials[];
+
+layout(set = 3, binding = 1) uniform sampler2D textures[];
+
+#include "random.glsl"
+const float CONTRAST = 1.0;
+const float BRIGHTNESS = 1.0;
+const float SATURATION = 1.1;
+
+struct Ray{
+	vec3 origin;
+	vec3 direction;
+};
+
+struct Hit{
+	vec3 color;
+	vec3 incommingLight;
+	Ray ray;
+	uint payloadSeed;
+	bool terminate;
+};
+layout (location = 0) rayPayloadEXT Hit hitValue;
+
+#define NUM_BOUNCE 4
+
+vec3 linear_to_srgb(vec3 in_c, float gamma) {
+    vec3 low = 12.92 * in_c;
+    vec3 high = 1.055 * pow(in_c, vec3(1.0 / gamma)) - vec3(0.055);
+	vec3 output_ = vec3(in_c.x > 0.0031308 ? high.x : low.x,
+						in_c.y > 0.0031308 ? high.y : low.y,
+						in_c.z > 0.0031308 ? high.z : low.z);
+    return  output_;
+}
+
+const float[5] AFILM_CONST = float[5](2.51, 0.03, 2.43, 0.59, 0.14);
+vec3 aces_filmic(float gamma, vec3 in_c) {
+    vec3 out_c = (in_c * (AFILM_CONST[0] * in_c + AFILM_CONST[1]))
+                    / (in_c * (AFILM_CONST[2] * in_c + AFILM_CONST[3]) + AFILM_CONST[4]);
+    return linear_to_srgb(out_c, gamma);
+}
 void main()
 {
-	
+	uint seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, cameraBuffer.frameNumber);
+	hitValue.payloadSeed = seed;
+
+	float r1 = rnd(seed);
+	float r2 = rnd(seed);
+
+	 // Subpixel jitter: send the ray through a different position inside the pixel
+    // each time, to provide antialiasing.
+    vec2 subpixel_jitter = cameraBuffer.frameNumber == 0 ? vec2(0.5f, 0.5f) : vec2(r1, r2);
+    const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + subpixel_jitter;
+    const vec2 inUV        = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
+    vec2       d           = inUV * 2.0 - 1.0;
+
+	mat4 viewInv = inverse(cameraBuffer.view);
+	mat4 projInv = inverse(cameraBuffer.projection);
+
+	vec4 origin = viewInv * vec4(0,0,0,1);
+	vec4 target = projInv * vec4(d.x, d.y, 1, 1) ;
+	vec4 direction = viewInv * vec4(normalize(target.xyz), 0.0) ;
+
+	float tmin = 0.001;
+	float tmax = 1000000.0;
+
+	hitValue.color = vec3(1.0);
+	hitValue.incommingLight = vec3(0.0);
+	hitValue.terminate = false;
+	hitValue.ray.origin = origin.xyz;
+	hitValue.ray.direction = normalize(direction.xyz);
+
+	for(int i=0;i<NUM_BOUNCE;i++)
+	{
+		if(hitValue.terminate)
+			break;
+		traceRayEXT(topLevelAS, gl_RayFlagsNoneEXT, 0xff, 0,0,0, hitValue.ray.origin.xyz, tmin, hitValue.ray.direction.xyz, tmax, 0);
+	}
+	vec3 out_color = aces_filmic(2.4,hitValue.incommingLight);
+	out_color = clamp(mix(vec3(0.5),out_color, CONTRAST), 0.0, 1.0);
+	out_color = pow(out_color, vec3(1.0/BRIGHTNESS));
+	vec3 sat = vec3(dot(out_color, vec3(0.299, 0.587, 0.114)));
+	out_color = mix(sat, out_color, SATURATION);
+	out_color = clamp(out_color,0.0,1.0);
+	if(cameraBuffer.frameNumber > 0)
+	{
+		float a         = 1.0f / float(cameraBuffer.frameNumber + 1);
+		vec3  old_color = imageLoad(image, ivec2(gl_LaunchIDEXT.xy)).xyz;
+		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(mix(old_color, hitValue.incommingLight, a), 1.f));
+	}
+	else
+	{
+		// First frame, replace the value in the buffer
+		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(hitValue.incommingLight, 1.f));
+	}
 }

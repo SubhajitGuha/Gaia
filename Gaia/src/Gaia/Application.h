@@ -36,6 +36,7 @@ namespace Gaia {
 		void setImGuiRenderingContext(IContext& context, TextureHandle renderTexture); 
 	public:
 		static TimeStep deltaTime;
+		static uint32_t frameNum;
 		glm::vec3 v3;
 		float v = 0;
 		float r = 0;

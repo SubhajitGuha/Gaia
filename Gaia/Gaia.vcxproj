@@ -510,9 +510,12 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <None Include="src\Gaia\Renderer\Shaders\brdf.glsl" />
     <None Include="src\Gaia\Renderer\Shaders\closestHit.rchit" />
+    <None Include="src\Gaia\Renderer\Shaders\random.glsl" />
     <None Include="src\Gaia\Renderer\Shaders\rayGen.rgen" />
     <None Include="src\Gaia\Renderer\Shaders\rayMiss.rmiss" />
+    <None Include="src\Gaia\Renderer\Shaders\shadowMiss.rmiss" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

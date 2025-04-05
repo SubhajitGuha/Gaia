@@ -524,10 +524,11 @@ namespace Gaia
 	};
 
 	struct RayTracingPipelineDesc final {
+		static enum {MAX_MISS_SHADERS = 4};
 		ShaderModuleHandle smRayGen;
 		ShaderModuleHandle smAnyHit;
 		ShaderModuleHandle smClosestHit;
-		ShaderModuleHandle smMiss;
+		ShaderModuleHandle smMiss[MAX_MISS_SHADERS];
 		ShaderModuleHandle smIntersection;
 		ShaderModuleHandle smCallable;
 		const char* enteryPoint = "main";
@@ -537,6 +538,15 @@ namespace Gaia
 		{
 			uint32_t n = 0;
 			while (n < MAX_DESCRIPTOR_SETS && descriptorSetLayout[n].isValid())
+			{
+				n++;
+			}
+			return n;
+		}
+		uint32_t getNumMissShaders()
+		{
+			uint32_t n = 0;
+			while (n < MAX_MISS_SHADERS && smMiss[n].isValid())
 			{
 				n++;
 			}
@@ -759,10 +769,12 @@ namespace Gaia
 		virtual void cmdPushConstants(const void* data, size_t size, size_t offset) = 0;
 
 		virtual void cmdBindGraphicsDescriptorSets(uint32_t firstSet, RenderPipelineHandle pipeline,const std::vector<DescriptorSetLayoutHandle>& descriptorSetLayouts) = 0;
+		virtual void cmdBindRayTracingDescriptorSets(uint32_t firstSet, RayTracingPipelineHandle pipeline, const std::vector<DescriptorSetLayoutHandle>& descriptorSetLayouts) = 0;
 
 		virtual void cmdDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) = 0;
 		virtual void cmdDrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex,uint32_t vertexOffset, uint32_t firstInstance) = 0;
 
+		virtual void cmdBlitImage(TextureHandle srcImageHandle, TextureHandle dstImageHandle) = 0;
 	};
 
 	class IContext
