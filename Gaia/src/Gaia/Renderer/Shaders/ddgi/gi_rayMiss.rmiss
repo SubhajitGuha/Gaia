@@ -43,18 +43,13 @@ layout(set = 3, binding = 0) readonly buffer materialLayout
 
 layout(set = 3, binding = 1) uniform sampler2D textures[];
 
-#include "random.glsl"
-
-struct Ray{
-	vec3 origin;
-	vec3 dir;
-};
+#include "../random.glsl"
 
 struct Hit{
 	vec3 color;
 	vec3 incommingLight;
-	Ray ray;
 	uint payloadSeed;
+	float rayDistance;
 };
 layout (location = 0) rayPayloadInEXT Hit hitValue;
 
@@ -77,5 +72,5 @@ vec3 GetEnvironmentLight(vec3 dir)
 }
 void main()
 {
-	hitValue.incommingLight += (GetEnvironmentLight(gl_WorldRayDirectionEXT)) * hitValue.color;
+	hitValue.incommingLight = normalize(GetEnvironmentLight(gl_WorldRayDirectionEXT));// * hitValue.color;
 }

@@ -3,6 +3,7 @@
 #include "glm/glm.hpp"
 #include <glm/gtc/type_ptr.hpp>
 #include "Gaia/Material.h"
+#include <limits>
 
 #define GL_BYTE 0x1400           // 5120
 #define GL_UNSIGNED_BYTE 0x1401  // 5121
@@ -39,9 +40,15 @@ namespace Gaia
 		uint32_t numVertices;
 		//Bounds mesh_bounds; //sub_mesh bounds
 	};
+	struct SceneBounds
+	{
+		glm::vec3 min = glm::vec3(std::numeric_limits<float>::max());
+		glm::vec3 max = glm::vec3(std::numeric_limits<float>::lowest());
+	};
 	class LoadMesh
 	{
 	public:
+		
 		LoadMesh();
 		LoadMesh(const std::string& Path);
 		~LoadMesh();
@@ -60,8 +67,8 @@ namespace Gaia
 		LoadMesh* GetLOD(int lodIndex);*/
 
 	public:
+		SceneBounds sceneBounds_;
 		struct VertexAttributes {
-			//glm::vec3 Position;
 			glm::vec4 Position;
 			glm::vec2 TextureCoordinate;
 			glm::vec3 Normal;
@@ -97,7 +104,6 @@ namespace Gaia
 		void LoadObj(const std::string& Path);
 		void LoadTextures();
 		void LoadMatrials();
-		void LoadTransforms(int nodeIndex, glm::mat4& parentTransform);
 		glm::mat4 getTransform(int nodeIndex);
 		void LoadVertexData(int mesh_index);
 		template <typename T>

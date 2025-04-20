@@ -168,6 +168,7 @@
     <ClInclude Include="src\Gaia\Renderer\Pool.h" />
     <ClInclude Include="src\Gaia\Renderer\Renderer.h" />
     <ClInclude Include="src\Gaia\Renderer\Shadows.h" />
+    <ClInclude Include="src\Gaia\Renderer\ddgi.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkBootstrap.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkBootstrapDispatch.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkInitializers.h" />
@@ -486,6 +487,7 @@
     <ClCompile Include="src\Gaia\Renderer\GaiaRenderer.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Renderer.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Shadows.cpp" />
+    <ClCompile Include="src\Gaia\Renderer\ddgi.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkBootstrap.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkInitializers.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkUtils.cpp" />
@@ -512,6 +514,17 @@
   <ItemGroup>
     <None Include="src\Gaia\Renderer\Shaders\brdf.glsl" />
     <None Include="src\Gaia\Renderer\Shaders\closestHit.rchit" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_border_update.glsl" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_closestHit.rchit" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_commons.glsl" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_depth_border_update.comp" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_depth_probe_update.comp" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_irradiance_border_update.comp" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_irradiance_probe_update.comp" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_probe_update.glsl" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_rayGen.rgen" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_rayMiss.rmiss" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_rayMissShadow.rmiss" />
     <None Include="src\Gaia\Renderer\Shaders\random.glsl" />
     <None Include="src\Gaia\Renderer\Shaders\rayGen.rgen" />
     <None Include="src\Gaia\Renderer\Shaders\rayMiss.rmiss" />

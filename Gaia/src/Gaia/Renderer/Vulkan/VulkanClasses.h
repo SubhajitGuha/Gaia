@@ -138,6 +138,15 @@ namespace Gaia {
 		VkStridedDeviceAddressRegionKHR sbtEntryCallable = {};
 	};
 
+	struct ComputePipelineState
+	{
+		ComputePipelineDesc desc_;
+
+		VkPipeline pipeline_ = VK_NULL_HANDLE;
+		VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
+		VkShaderStageFlags shaderStageFlags_ = 0;
+	};
+
 	class VulkanPipelineBuilder final
 	{
 	public:
@@ -385,15 +394,21 @@ namespace Gaia {
 
 		void cmdBindVertexBuffer(uint32_t index, BufferHandle buffer, uint64_t bufferOffset) override;
 		void cmdBindIndexBuffer(BufferHandle indexBuffer, IndexFormat indexFormat, uint64_t indexBufferOffset) override;
-		void cmdPushConstants(const void* data, size_t size, size_t offset) override;
-
-		void cmdBindGraphicsDescriptorSets(uint32_t firstSet, RenderPipelineHandle pipeline, const std::vector<DescriptorSetLayoutHandle>& descriptorSetLayouts);
-		void cmdBindRayTracingDescriptorSets(uint32_t firstSet, RayTracingPipelineHandle pipeline, const std::vector<DescriptorSetLayoutHandle>& descriptorSetLayouts);
+		void cmdPushConstants(RenderPipelineHandle handle, uint32_t shaderStageFlags, const void* data, size_t size, size_t offset = 0) override;
+		void cmdPushConstants(RayTracingPipelineHandle handle, uint32_t shaderStageFlags, const void* data, size_t size, size_t offset = 0) override;
+		void cmdPushConstants(ComputePipelineHandle handle, uint32_t shaderStageFlags, const void* data, size_t size, size_t offset = 0) override;
+		
+		void cmdBindGraphicsDescriptorSets(uint32_t firstSet, RenderPipelineHandle pipeline, const std::vector<DescriptorSetLayoutHandle>& descriptorSetLayouts) override;
+		void cmdBindRayTracingDescriptorSets(uint32_t firstSet, RayTracingPipelineHandle pipeline, const std::vector<DescriptorSetLayoutHandle>& descriptorSetLayouts) override;
+		void cmdBindComputeDescriptorSets(uint32_t firstSet, ComputePipelineHandle pipeline, const std::vector<DescriptorSetLayoutHandle>& descriptorSetLayouts) override;
 
 		void cmdDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override;
 		void cmdDrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, uint32_t vertexOffset, uint32_t firstInstance) override;
 
-		void cmdBlitImage(TextureHandle srcImage, TextureHandle dstImage);
+		void cmdBindComputePipeline(ComputePipelineHandle handle) override;
+		void cmdDispatch(uint32_t workGroupSizeX, uint32_t workGroupSizeY, uint32_t workGroupSizeZ) override;
+
+		void cmdBlitImage(TextureHandle srcImage, TextureHandle dstImage) override;
 		VkCommandBuffer getVkCommandBuffer() {
 			return commandBufferWraper_->cmdBuffer_;
 		}
@@ -435,6 +450,7 @@ namespace Gaia {
 		Holder<SamplerHandle> createSampler(SamplerStateDesc& desc);
 		Holder<AccelStructHandle> createAccelerationStructure(AccelStructDesc& desc);
 		Holder<RayTracingPipelineHandle> createRayTracingPipeline(const RayTracingPipelineDesc& desc);
+		Holder<ComputePipelineHandle> createComputePipeline(const ComputePipelineDesc& desc);
 
 		void destroy(BufferHandle handle) override;
 		void destroy(TextureHandle handle) override;
@@ -444,6 +460,7 @@ namespace Gaia {
 		void destroy(SamplerHandle handle) override;
 		void destroy(AccelStructHandle handle) override;
 		void destroy(RayTracingPipelineHandle handle) override;
+		void destroy(ComputePipelineHandle handle) override;
 
 		//swapchain functions
 		TextureHandle getCurrentSwapChainTexture() override;
@@ -480,6 +497,7 @@ namespace Gaia {
 
 		VkPipeline getPipeline(RenderPipelineHandle handle);
 		VkPipeline getPipeline(RayTracingPipelineHandle handle);
+		VkPipeline getPipeline(ComputePipelineHandle handle);
 
 		AccelStructHandle BuildTLAS(AccelStructDesc& desc);
 		AccelStructHandle BuildBLAS(AccelStructDesc& desc);
@@ -529,6 +547,7 @@ namespace Gaia {
 		Pool<Sampler, VulkanSampler> samplerPool_;
 		Pool<AcclerationStructure, VulkanAccelerationStructure> accelStructurePool_;
 		Pool<RayTracingPipeline, RayTracingPipelineState> rayTracingPipelinePool_;
+		Pool<ComputePipeline, ComputePipelineState> computePipelinePool_;
 	};
 
 	inline VkBlendOp getVkBlendOpFromBlendOp(BlendOp operation);

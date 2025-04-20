@@ -6,6 +6,7 @@ namespace Gaia
 {
 	class Scene;
 	class Shadows;
+	class DDGI;
 	struct MVPMatrices
 	{
 		glm::mat4 view = glm::mat4(1.0);
@@ -25,6 +26,7 @@ namespace Gaia
 	class Renderer
 	{
 		friend class Shadows;
+		friend class DDGI;
 	public:
 		static VertexInput vertexInput;
 
@@ -38,11 +40,16 @@ namespace Gaia
 		void render(Scene& scene);
 		TextureHandle getRenderTarget() { return renderTarget_; }
 		inline IContext* getContext() { return renderContext_.get(); }
-		explicit Renderer(void* window, Scene& scene);
+		void onFirstFrame(Scene& scene);
+		Renderer(void* window, Scene& scene);
 		~Renderer();
+	public:
+		static bool isFirstFrame;
 	private:
 		std::unique_ptr<IContext> renderContext_;
 		uint32_t numIndicesPerMesh;
+		float rayTraceOutputScale = 1.0;
+		std::pair<uint32_t, uint32_t> rayTraceOutput;
 
 		//render the entire scene into this texture
 		Holder<TextureHandle> renderTarget_;
@@ -89,11 +96,13 @@ namespace Gaia
 		Holder<DescriptorSetLayoutHandle> shadowDescSetLayout;
 		Holder<DescriptorSetLayoutHandle> accelStructureDescSetLayout;
 		Holder<DescriptorSetLayoutHandle> geometryBufferAddressDescSetLayout;
+		Holder<DescriptorSetLayoutHandle> rayTraceImageDescSetLayout;
 
 		MVPMatrices mvpData = {};
 
 		//other components
 		std::unique_ptr<Shadows> shadows_;
+		std::unique_ptr<DDGI> ddgi_;
 	private:
 		void createGpuMeshTexturesAndBuffers(Scene& scene);
 	};

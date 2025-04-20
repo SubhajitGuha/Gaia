@@ -53,6 +53,8 @@ namespace Gaia
 		inline LoadMesh& getMesh() const { return *mesh_; }
 		void update(TimeStep ts);
 		void onEvent(Event& event);
+
+		inline SceneBounds getSceneBounds() { return mesh_->sceneBounds_; }
 	public:
 		LightParameters lightParameter{};
 		glm::vec3 LightPosition{ 0.0 , 0.0, 0.0};

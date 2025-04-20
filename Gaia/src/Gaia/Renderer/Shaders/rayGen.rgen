@@ -63,7 +63,7 @@ struct Hit{
 };
 layout (location = 0) rayPayloadEXT Hit hitValue;
 
-#define NUM_BOUNCE 4
+#define NUM_BOUNCE 1
 
 vec3 linear_to_srgb(vec3 in_c, float gamma) {
     vec3 low = 12.92 * in_c;
@@ -102,8 +102,8 @@ void main()
 	vec4 target = projInv * vec4(d.x, d.y, 1, 1) ;
 	vec4 direction = viewInv * vec4(normalize(target.xyz), 0.0) ;
 
-	float tmin = 0.001;
-	float tmax = 1000000.0;
+	float tmin = 0.01;
+	float tmax = 10000.0;
 
 	hitValue.color = vec3(1.0);
 	hitValue.incommingLight = vec3(0.0);
@@ -115,17 +115,12 @@ void main()
 	{
 		if(hitValue.terminate)
 			break;
-		traceRayEXT(topLevelAS, gl_RayFlagsNoneEXT, 0xff, 0,0,0, hitValue.ray.origin.xyz, tmin, hitValue.ray.direction.xyz, tmax, 0);
+		traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0,0,0, hitValue.ray.origin.xyz, tmin, hitValue.ray.direction.xyz, tmax, 0);
 	}
-	vec3 out_color = aces_filmic(2.4,hitValue.incommingLight);
-	out_color = clamp(mix(vec3(0.5),out_color, CONTRAST), 0.0, 1.0);
-	out_color = pow(out_color, vec3(1.0/BRIGHTNESS));
-	vec3 sat = vec3(dot(out_color, vec3(0.299, 0.587, 0.114)));
-	out_color = mix(sat, out_color, SATURATION);
-	out_color = clamp(out_color,0.0,1.0);
+	
 	if(cameraBuffer.frameNumber > 0)
 	{
-		float a         = 1.0f / float(cameraBuffer.frameNumber + 1);
+		float a         = 1.0f / float(cameraBuffer.frameNumber + 1.0);
 		vec3  old_color = imageLoad(image, ivec2(gl_LaunchIDEXT.xy)).xyz;
 		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(mix(old_color, hitValue.incommingLight, a), 1.f));
 	}

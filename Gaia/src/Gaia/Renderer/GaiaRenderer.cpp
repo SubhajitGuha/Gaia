@@ -64,3 +64,11 @@ void Gaia::destroy(Gaia::IContext* ctx, Gaia::RayTracingPipelineHandle handle)
 		ctx->destroy(handle);
 	}
 }
+
+void Gaia::destroy(IContext* ctx, ComputePipelineHandle handle)
+{
+	if (ctx)
+	{
+		ctx->destroy(handle);
+	}
+}

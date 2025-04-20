@@ -5,6 +5,7 @@ const float ONE_BY_TWO_PI = 0.15915494309;
 const float ONE_BY_FOUR_PI = 0.079577471545948;
 const float PI_BY_TWO = 1.57079632679;
 const float PI_BY_FOUR = 0.78539816339;
+const float EPSILON = 1.0e-16;
 
 const float transmission_wt = 0.0;
 

@@ -1125,6 +1125,7 @@
     <ClInclude Include="vendor\stb_image\stb_image_resize.h">
       <Filter>vendor\stb_image</Filter>
     </ClInclude>
+    <ClInclude Include="src\Gaia\Renderer\ddgi.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Gaia\Application.cpp">
@@ -1205,6 +1206,7 @@
     <ClCompile Include="vendor\stb_image\stb_image_resize.cpp">
       <Filter>vendor\stb_image</Filter>
     </ClCompile>
+    <ClCompile Include="src\Gaia\Renderer\ddgi.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="src\Gaia\Renderer\Shaders\rayGen.rgen" />
@@ -1213,5 +1215,16 @@
     <None Include="src\Gaia\Renderer\Shaders\random.glsl" />
     <None Include="src\Gaia\Renderer\Shaders\brdf.glsl" />
     <None Include="src\Gaia\Renderer\Shaders\shadowMiss.rmiss" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_rayGen.rgen" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_rayMiss.rmiss" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_closestHit.rchit" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_probe_update.glsl" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_commons.glsl" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_depth_probe_update.comp" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_irradiance_probe_update.comp" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_border_update.glsl" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_depth_border_update.comp" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_irradiance_border_update.comp" />
+    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_rayMissShadow.rmiss" />
   </ItemGroup>
 </Project>

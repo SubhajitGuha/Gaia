@@ -1,5 +1,8 @@
 #version 450
 #extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_GOOGLE_include_directive : require
+
+#include "ddgi/gi_commons.glsl"
 
 //shader input
 flat layout (location = 0) in uint materialId;
@@ -58,6 +61,14 @@ layout(set = 2, binding = 0) uniform LightMatricesLayout
 } lightMatrixBuffer;
 
 layout(set = 2, binding = 1) uniform sampler2D shdowTextures[];
+
+//DDGI probe data
+layout(set = 3, binding = 0) uniform sampler2D irradianceImage;
+layout(set = 3, binding = 1) uniform sampler2D depthImage;
+
+layout(set = 4, binding = 0) uniform DdgiParametersLayout{
+	DdgiParameters parameters;
+}ddgi;
 
 //output write
 layout (location = 0) out vec4 outFragColor;
@@ -167,7 +178,7 @@ float textureProject(vec2 offset, int cascadeIndex)
 	{
 		float depth = texture(shdowTextures[cascadeIndex], c.xy).r;
 		if (c.w > 0.0 && c.z - bias > depth)
-			return 0.2;	
+			return 0.0;	
 	}
 
 	return shadow;
@@ -208,10 +219,20 @@ float calculateShadow()
 
 	return shadowFactor/count;
 }
+
+const float GI_INTENSITY = 1.0;
+vec3 indirect_lighting(vec3 view_dir, vec3 N, vec3 P, vec3 kD, vec3 albedo)
+{
+	return GI_INTENSITY * sample_irradiance(ddgi.parameters, P, N, view_dir, irradianceImage, depthImage);
+}
+
 void main() 
 {
 	Material mat = materialBuffer.materials[materialId];
-
+	vec4 clipSpace = cameraBuffer.projection * cameraBuffer.view * vertexPosition;
+	clipSpace.xyz /= clipSpace.w;
+	
+	vec2 cs_texCoord = clipSpace.xy * 0.5 + vec2(0.5);
 	vec4 albedo = mat.baseColorTexture!=-1? texture(textures[mat.baseColorTexture], texCoord): vec4(mat.baseColorFactor);
 	if (albedo.a < 0.02)
 	{
@@ -238,9 +259,14 @@ void main()
 	kd = vec3(1.0) - ks;
 	kd *= (1.0 - metallic);
 	PBR_Color += ( (kd * DiffuseBRDF(albedo.rgb, EyeDirection, DirectionalLight_Direction)) + SpecularBRDF(DirectionalLight_Direction , EyeDirection , vertexNormal) ) * (shadow * lightParameters.color * lightParameters.intensity) * max(dot(vertexNormal,DirectionalLight_Direction), 0.001) ; //for directional light (no attenuation)
-	vec3 ambiant = vec3(0.02);
-	PBR_Color += ambiant;
+	
+	bool front_facing = dot(vertexNormal, EyeDirection) >= 0.0;
+	vec3 ffnormal = front_facing? vertexNormal : -vertexNormal;
+	
+	vec3 GI = indirect_lighting(EyeDirection, ffnormal, vertexPosition.xyz, kd, albedo.rgb);
+
+	PBR_Color += GI.rgb;
 	//PBR_Color = pow(PBR_Color, vec3(1.0/2.2));
 	PBR_Color = ACESFilm(PBR_Color);
-	outFragColor = vec4(PBR_Color.rgb,1.0f);
+	outFragColor = vec4(GI.rgb,1.0f);
 }

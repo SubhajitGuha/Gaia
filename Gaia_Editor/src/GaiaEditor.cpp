@@ -8,7 +8,7 @@ GaiaEditor::GaiaEditor()
 {
 	Window& window = Application::Get().GetWindow();
 	scene_ = Gaia::Scene::create(SceneDescriptor{
-		.meshPath = "C:/Users/Subhajit/OneDrive/Documents/bistro_ext.gltf",
+		.meshPath = "C:/Users/Subhajit/OneDrive/Documents/cornell_box.gltf",
 		.windowWidth = window.GetWidth(),
 		.windowHeight = window.GetHeight() 
 		});
@@ -36,11 +36,20 @@ void GaiaEditor::OnUpdate(float deltatime)
 void GaiaEditor::OnImGuiRender()
 {
 	ImGui::Begin("Light");
-	ImGui::DragFloat3("Light Direction", &scene_->lightParameter.direction.x,0.1);
+	if (ImGui::DragFloat3("Light Direction", &scene_->lightParameter.direction.x, 0.1))
+	{
+		Renderer::isFirstFrame = true;
+	}
 	ImGui::DragFloat3("Light Position", &scene_->LightPosition.x, 0.1);
 
-	ImGui::ColorEdit3("Light Color", &scene_->lightParameter.color.x);
-	ImGui::DragFloat("Light Intensity", &scene_->lightParameter.intensity, 0.1);
+	if (ImGui::ColorEdit3("Light Color", &scene_->lightParameter.color.x))
+	{
+		Renderer::isFirstFrame = true;
+	}
+	if (ImGui::DragFloat("Light Intensity", &scene_->lightParameter.intensity, 0.1))
+	{
+		Renderer::isFirstFrame = true;
+	}
 	ImGui::DragFloat("cascade lamda", &Shadows::lamda, 0.001);
 
 	ImGui::End();

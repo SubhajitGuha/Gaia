@@ -60,11 +60,11 @@ namespace Gaia
 	using DescriptorSetLayoutHandle = Handle<struct DescriptorSetLayout>;
 	using AccelStructHandle = Handle<struct AcclerationStructure>;
 	using RayTracingPipelineHandle = Handle<struct RayTracingPipeline>;
+	using ComputePipelineHandle = Handle<struct ComputePipeline>;
 
 	//forward declare IContext
 	class IContext;
 	// forward declarations to access incomplete type IContext
-	//void destroy(IContext* ctx, ComputePipelineHandle handle);
 	void destroy(Gaia::IContext* ctx, Gaia::RenderPipelineHandle handle);
 	void destroy(Gaia::IContext* ctx, Gaia::ShaderModuleHandle handle);
 	void destroy(Gaia::IContext* ctx, Gaia::BufferHandle handle);
@@ -73,6 +73,7 @@ namespace Gaia
 	void destroy(Gaia::IContext* ctx, Gaia::SamplerHandle handle);
 	void destroy(Gaia::IContext* ctx, Gaia::AccelStructHandle);
 	void destroy(Gaia::IContext* ctx, Gaia::RayTracingPipelineHandle handle);
+	void destroy(IContext* ctx, ComputePipelineHandle handle);
 
 	//void destroy(IContext* ctx, QueryPoolHandle handle);
 
@@ -523,6 +524,24 @@ namespace Gaia
 		}
 	};
 
+	struct ComputePipelineDesc final
+	{
+		static const enum {MAX_COMPUTE_SHADERS = 16};
+		ShaderModuleHandle smComp;
+		const char* enteryPoint = "main"; //entery point for each compute shaders
+		const char* debugName = "";
+		DescriptorSetLayoutHandle descriptorSetLayout[MAX_DESCRIPTOR_SETS];
+		uint32_t getNumDescriptorSetLayouts()
+		{
+			uint32_t n = 0;
+			while (n < MAX_DESCRIPTOR_SETS && descriptorSetLayout[n].isValid())
+			{
+				n++;
+			}
+			return n;
+		}
+	};
+
 	struct RayTracingPipelineDesc final {
 		static enum {MAX_MISS_SHADERS = 4};
 		ShaderModuleHandle smRayGen;
@@ -581,6 +600,7 @@ namespace Gaia
 		const char* data = nullptr;
 		size_t dataSize = 0; // if "dataSize" is non-zero, interpret "data" as binary shader data
 		const char* debugName = "";
+		size_t pushConstantSize = 0; // push constant is present if size is > 0
 
 		//ShaderModuleDesc(const char* source, ShaderStage stage, const char* debugName = ""): data(source), shaderStage(stage), debugName(debugName){}
 		ShaderModuleDesc(const void* data, size_t dataLength, ShaderStage stage, const char* debugName = "") : data(static_cast<const char*>(data)), shaderStage(stage), debugName(debugName), dataSize(dataLength) {
@@ -766,13 +786,19 @@ namespace Gaia
 
 		virtual void cmdBindVertexBuffer(uint32_t index, BufferHandle buffer, uint64_t bufferOffset) = 0;
 		virtual void cmdBindIndexBuffer(BufferHandle indexBuffer, IndexFormat indexFormat, uint64_t indexBufferOffset) = 0;
-		virtual void cmdPushConstants(const void* data, size_t size, size_t offset) = 0;
+		virtual void cmdPushConstants(RenderPipelineHandle handle, uint32_t shaderStageFlags, const void* data, size_t size, size_t offset = 0) = 0;
+		virtual void cmdPushConstants(RayTracingPipelineHandle handle, uint32_t shaderStageFlags, const void* data, size_t size, size_t offset = 0) = 0;
+		virtual void cmdPushConstants(ComputePipelineHandle handle, uint32_t shaderStageFlags, const void* data, size_t size, size_t offset = 0) = 0;
 
 		virtual void cmdBindGraphicsDescriptorSets(uint32_t firstSet, RenderPipelineHandle pipeline,const std::vector<DescriptorSetLayoutHandle>& descriptorSetLayouts) = 0;
 		virtual void cmdBindRayTracingDescriptorSets(uint32_t firstSet, RayTracingPipelineHandle pipeline, const std::vector<DescriptorSetLayoutHandle>& descriptorSetLayouts) = 0;
+		virtual void cmdBindComputeDescriptorSets(uint32_t firstSet, ComputePipelineHandle pipeline, const std::vector<DescriptorSetLayoutHandle>& descriptorSetLayouts) = 0;
 
 		virtual void cmdDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) = 0;
 		virtual void cmdDrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex,uint32_t vertexOffset, uint32_t firstInstance) = 0;
+
+		virtual void cmdBindComputePipeline(ComputePipelineHandle handle) = 0;
+		virtual void cmdDispatch(uint32_t workGroupSizeX, uint32_t workGroupSizeY, uint32_t workGroupSizeZ) = 0;
 
 		virtual void cmdBlitImage(TextureHandle srcImageHandle, TextureHandle dstImageHandle) = 0;
 	};
@@ -800,6 +826,7 @@ namespace Gaia
 		virtual Holder<SamplerHandle> createSampler(SamplerStateDesc& desc) = 0;
 		virtual Holder<AccelStructHandle> createAccelerationStructure(AccelStructDesc& desc) = 0;
 		virtual Holder<RayTracingPipelineHandle> createRayTracingPipeline(const RayTracingPipelineDesc& desc) = 0;
+		virtual Holder<ComputePipelineHandle> createComputePipeline(const ComputePipelineDesc& desc) = 0;
 
 		virtual void destroy(BufferHandle handle) = 0;
 		virtual void destroy(TextureHandle handle) = 0;
@@ -809,6 +836,7 @@ namespace Gaia
 		virtual void destroy(SamplerHandle handle) = 0;
 		virtual void destroy(AccelStructHandle handle) = 0;
 		virtual void destroy(RayTracingPipelineHandle handle) = 0;
+		virtual void destroy(ComputePipelineHandle handle) = 0;
 
 		//swapchain functions
 		virtual TextureHandle getCurrentSwapChainTexture() = 0;

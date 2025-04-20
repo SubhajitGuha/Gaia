@@ -47,8 +47,12 @@ namespace Gaia {
 		/*dispach.Dispatch<WindowResizeEvent>([](WindowResizeEvent e) {
 			Renderer::WindowResize(e.GetWidth(), e.GetHeight());
 			return false; });*/
-		dispach.Dispatch<KeyPressedEvent>([&](KeyPressedEvent& e) {frameNum = 0;  return true; });
-		dispach.Dispatch<MouseButtonPressed>([&](MouseButtonPressed& e) {frameNum = 0; return true; });
+		dispach.Dispatch<KeyPressedEvent>([&](KeyPressedEvent& e) {
+			//frameNum = 0;  
+			return true; });
+		dispach.Dispatch<MouseButtonPressed>([&](MouseButtonPressed& e) {
+			//frameNum = 0; 
+			return true; });
 
 		GAIA_CORE_TRACE(e);
 		for (auto it = m_layerstack.end(); it != m_layerstack.begin();)

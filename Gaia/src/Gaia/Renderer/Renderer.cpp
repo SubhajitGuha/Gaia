@@ -3,13 +3,54 @@
 #include "Gaia/Scene/Scene.h"
 #include "Gaia/Renderer/Vulkan/VulkanClasses.h"
 #include "Shadows.h"
+#include "ddgi.h"
+#include "ddgi.h"
+
 #include "Gaia/Input.h"
 #include "Gaia/Application.h"
 
 namespace fs = std::filesystem;
 namespace Gaia
 {
+    bool Renderer::isFirstFrame = true;
     VertexInput Renderer::vertexInput = VertexInput{};
+
+    void Renderer::onFirstFrame(Scene& scene)
+    {
+        ShaderModuleDesc smVertexDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/vert_shader.spv", Stage_Vert);
+        ShaderModuleDesc smFragDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/frag_shader.spv", Stage_Frag);
+        vertexShaderModule = renderContext_->createShaderModule(smVertexDesc);
+        fragmentShaderModule = renderContext_->createShaderModule(smFragDesc);
+
+        RenderPipelineDesc rps{
+            .topology = Topology_Triangle,
+            .smVertex = vertexShaderModule,
+            .smFragment = fragmentShaderModule,
+            .depthFormat = Format_Z_F32,
+            .cullMode = CullMode_Back,
+            .windingMode = WindingMode_CCW,
+            .polygonMode = PolygonMode_Fill,
+        };
+
+        rps.colorAttachments[0].format = Format_RGBA_SRGB8;
+        rps.colorAttachments[0].blendEnabled = true;
+        rps.colorAttachments[0].alphaBlendOp = BlendOp_Add;
+        rps.colorAttachments[0].rgbBlendOp = BlendOp_Add;
+        rps.colorAttachments[0].srcAlphaBlendFactor = BlendFactor_One;
+        rps.colorAttachments[0].dstAlphaBlendFactor = BlendFactor_One;
+        rps.colorAttachments[0].srcRGBBlendFactor = BlendFactor_SrcAlpha;
+        rps.colorAttachments[0].dstRGBBlendFactor = BlendFactor_OneMinusSrcAlpha;
+
+        rps.descriptorSetLayout[0] = mvpMatrixDescriptorSetLayout;
+        rps.descriptorSetLayout[1] = meshDescriptorSet;
+        rps.descriptorSetLayout[2] = shadowDescSetLayout;
+        rps.descriptorSetLayout[3] = ddgi_->getProbeDSL(); //get the DDGI probe irradiance and depth images DSL
+        rps.descriptorSetLayout[4] = ddgi_->getDDGIParameters();
+
+        rps.vertexInput = vertexInput;
+
+        renderPipeline = renderContext_->createRenderPipeline(rps);
+    }
 
     Renderer::Renderer(void* window, Scene& scene)
     {
@@ -59,11 +100,13 @@ namespace Gaia
         };
         renderTarget_ = renderContext_->createTexture(rtDesc);
 
+        rayTraceOutput = { static_cast<uint32_t>(windowSize.first * rayTraceOutputScale) , static_cast<uint32_t>(windowSize.second * rayTraceOutputScale)};
+        
         TextureDesc rayTracingTexDesc{
             .type = TextureType_2D,
             .format = Format_RGBA_F32,
-            .dimensions = {windowSize.first, windowSize.second, 1},
-            .usage = TextureUsageBits_Storage,
+            .dimensions = {rayTraceOutput.first, rayTraceOutput.second, 1},
+            .usage = TextureUsageBits_Storage | TextureUsageBits_Sampled,
             .storage = StorageType_Device,
         };
         rtOutputTexture = renderContext_->createTexture(rayTracingTexDesc);
@@ -76,6 +119,9 @@ namespace Gaia
         }
 
         createGpuMeshTexturesAndBuffers(scene);
+        
+        //create vertex, index buffers and build the acceleration structure
+        createStaticBuffers(scene);
 
         SamplerStateDesc samplerDesc{
             .minFilter = SamplerFilter_Linear,
@@ -185,6 +231,18 @@ namespace Gaia
          };
         meshDescriptorSet = renderContext_->createDescriptorSetLayout(meshLayoutDesc);
 
+        std::vector<DescriptorSetLayoutDesc> rayTraceImageDSLDesc{
+            DescriptorSetLayoutDesc{
+                .binding = 0,
+                .descriptorCount = 1,
+                .descriptorType = DescriptorType_CombinedImageSampler,
+                .shaderStage = Stage_Frag | Stage_RayGen | Stage_ClosestHit | Stage_Miss,
+                .texture = DescriptorSetLayoutDesc::getResource<TextureHandle>(rtOutputTexture),
+                .sampler = imageSampler,
+            },
+        };
+        rayTraceImageDescSetLayout = renderContext_->createDescriptorSetLayout(rayTraceImageDSLDesc);
+
         //create the components
         ShadowDescriptor shadowDesc{
             .numCascades = 4,
@@ -211,51 +269,6 @@ namespace Gaia
              }
         };
         shadowDescSetLayout = renderContext_->createDescriptorSetLayout(shadowDslDesc);
-
-        ShaderModuleDesc smVertexDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/vert_shader.spv", Stage_Vert);
-        ShaderModuleDesc smFragDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/frag_shader.spv", Stage_Frag);
-        vertexShaderModule = renderContext_->createShaderModule(smVertexDesc);
-        fragmentShaderModule = renderContext_->createShaderModule(smFragDesc);
-
-        RenderPipelineDesc rps{
-            .topology = Topology_Triangle,
-            .smVertex = vertexShaderModule,
-            .smFragment = fragmentShaderModule,
-            .depthFormat = Format_Z_F32,
-            .cullMode = CullMode_Back,
-            .windingMode = WindingMode_CCW,
-            .polygonMode = PolygonMode_Fill,
-        };
-
-        rps.colorAttachments[0].format = Format_RGBA_SRGB8;
-        rps.colorAttachments[0].blendEnabled = true;
-        rps.colorAttachments[0].alphaBlendOp = BlendOp_Add;
-        rps.colorAttachments[0].rgbBlendOp = BlendOp_Add;
-        rps.colorAttachments[0].srcAlphaBlendFactor = BlendFactor_One;
-        rps.colorAttachments[0].dstAlphaBlendFactor = BlendFactor_One;
-        rps.colorAttachments[0].srcRGBBlendFactor = BlendFactor_SrcAlpha;
-        rps.colorAttachments[0].dstRGBBlendFactor = BlendFactor_OneMinusSrcAlpha;
-
-        rps.descriptorSetLayout[0] = mvpMatrixDescriptorSetLayout;
-        rps.descriptorSetLayout[1] = meshDescriptorSet;
-        rps.descriptorSetLayout[2] = shadowDescSetLayout;
-
-        rps.vertexInput = vertexInput;
-
-        renderPipeline = renderContext_->createRenderPipeline(rps);
-
-        //create vertex, index buffers and build the acceleration structure
-        createStaticBuffers(scene);
-
-        ShaderModuleDesc rayGenShaderDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/rayGen.rgen.spv", Stage_RayGen);
-        ShaderModuleDesc missShaderDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/rayMiss.rmiss.spv", Stage_Miss);
-        ShaderModuleDesc shadowMissShaderDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/shadowMiss.rmiss.spv", Stage_Miss);
-        ShaderModuleDesc closestHitShaderDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/closestHit.rchit.spv", Stage_ClosestHit);
-
-        rayGenShaderModule = renderContext_->createShaderModule(rayGenShaderDesc);
-        missShaderModule = renderContext_->createShaderModule(missShaderDesc);
-        shadowMissShaderModule = renderContext_->createShaderModule(shadowMissShaderDesc);
-        closestHitShaderModule = renderContext_->createShaderModule(closestHitShaderDesc);
 
         std::vector<DescriptorSetLayoutDesc> accelStructDSLDesc{
              DescriptorSetLayoutDesc{
@@ -287,6 +300,16 @@ namespace Gaia
 
         geometryBufferAddressDescSetLayout = renderContext_->createDescriptorSetLayout(geometryBufferAddressDSLDesc);
 
+        ShaderModuleDesc rayGenShaderDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/rayGen.rgen.spv", Stage_RayGen);
+        ShaderModuleDesc missShaderDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/rayMiss.rmiss.spv", Stage_Miss);
+        ShaderModuleDesc shadowMissShaderDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/shadowMiss.rmiss.spv", Stage_Miss);
+        ShaderModuleDesc closestHitShaderDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/closestHit.rchit.spv", Stage_ClosestHit);
+
+        rayGenShaderModule = renderContext_->createShaderModule(rayGenShaderDesc);
+        missShaderModule = renderContext_->createShaderModule(missShaderDesc);
+        shadowMissShaderModule = renderContext_->createShaderModule(shadowMissShaderDesc);
+        closestHitShaderModule = renderContext_->createShaderModule(closestHitShaderDesc);
+
         RayTracingPipelineDesc rtpd{
             .smRayGen = rayGenShaderModule,
             .smClosestHit = closestHitShaderModule,
@@ -301,6 +324,7 @@ namespace Gaia
 
         rtPipeline = renderContext_->createRayTracingPipeline(rtpd);
 
+        ddgi_ = DDGI::create(this, scene);
     }
     Renderer::~Renderer()
     {
@@ -592,7 +616,7 @@ namespace Gaia
         if (Input::IsButtonPressed(0) || Input::IsButtonPressed(1) || Input::IsButtonPressed(2))
             Application::frameNum = 0;
         shadows_->update(scene);
-
+        ddgi_->update(scene);
         LoadMesh& mesh = scene.getMesh();
 
         EditorCamera& camera = scene.getMainCamera();
@@ -622,18 +646,23 @@ namespace Gaia
 
     void Renderer::render(Scene& scene)
     {
-        shadows_->render(scene);
-        auto windowSize = renderContext_->getWindowSize();
-        //hardware acc ray tracing
+        if (isFirstFrame)
         {
-            ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
-            cmdBuffer.cmdTransitionImageLayout(rtOutputTexture, ImageLayout_GENERAL);
-            cmdBuffer.cmdBindRayTracingPipeline(rtPipeline);
-            cmdBuffer.cmdBindRayTracingDescriptorSets(0, rtPipeline, { accelStructureDescSetLayout, geometryBufferAddressDescSetLayout, mvpMatrixDescriptorSetLayout, meshDescriptorSet });
-            cmdBuffer.cmdTraceRays(windowSize.first, windowSize.second, 1, rtPipeline);
-            renderContext_->submit(cmdBuffer);
+            onFirstFrame(scene);
         }
-        if(Application::frameNum == 0)
+        shadows_->render(scene);
+        ddgi_->render(scene);
+        auto windowSize = renderContext_->getWindowSize();
+        ////hardware acc ray tracing
+        //{
+        //    ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
+        //    cmdBuffer.cmdTransitionImageLayout(rtOutputTexture, ImageLayout_GENERAL);
+        //    cmdBuffer.cmdBindRayTracingPipeline(rtPipeline);
+        //    cmdBuffer.cmdBindRayTracingDescriptorSets(0, rtPipeline, { accelStructureDescSetLayout, geometryBufferAddressDescSetLayout, mvpMatrixDescriptorSetLayout, meshDescriptorSet });
+        //    cmdBuffer.cmdTraceRays(rayTraceOutput.first, rayTraceOutput.second, 1, rtPipeline);
+        //    renderContext_->submit(cmdBuffer);
+        //}
+        /*if(Application::frameNum == 0)
         {
             ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
             cmdBuffer.cmdTransitionImageLayout(rtOutputTexture, ImageLayout_TRANSFER_SRC_OPTIMAL);
@@ -648,39 +677,50 @@ namespace Gaia
             cmdBuffer.cmdTransitionImageLayout(renderTarget_, ImageLayout_TRANSFER_DST_OPTIMAL);
             cmdBuffer.cmdBlitImage(rtOutputTexture, renderTarget_);
             renderContext_->submit(cmdBuffer);
+        }*/
+        {
+            ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
+            cmdBuffer.cmdTransitionImageLayout(renderTarget_, ImageLayout_COLOR_ATTACHMENT_OPTIMAL);
+            cmdBuffer.cmdTransitionImageLayout(depthAttachment, ImageLayout_DEPTH_ATTACHMENT_OPTIMAL);
+            ClearValue clearVal = {
+             .colorValue = {0.3,0.3,0.3,1.0},
+             .depthClearValue = 1.0,
+            };
+            cmdBuffer.cmdTransitionImageLayout(ddgi_->getProbeIrradianceImage(), ImageLayout_SHADER_READ_ONLY_OPTIMAL);
+            cmdBuffer.cmdTransitionImageLayout(ddgi_->getProbeDepthImage(), ImageLayout_SHADER_READ_ONLY_OPTIMAL);
+
+            cmdBuffer.cmdBeginRendering(renderTarget_, depthAttachment, &clearVal);
+            cmdBuffer.cmdBindGraphicsPipeline(renderPipeline);
+            std::pair<uint32_t, uint32_t> windowDimensions = renderContext_->getWindowSize();
+            cmdBuffer.cmdSetViewport(Viewport{
+                .width = (float)windowDimensions.first,
+                .height = (float)windowDimensions.second,
+                .minDepth = 0.0,
+                .maxDepth = 1.0 });
+            cmdBuffer.cmdSetScissor(Scissor{
+                .width = windowDimensions.first,
+                .height = windowDimensions.second,
+                });
+            cmdBuffer.cmdBindGraphicsDescriptorSets(0, renderPipeline, {
+                mvpMatrixDescriptorSetLayout,
+                meshDescriptorSet,
+                shadowDescSetLayout,
+                ddgi_->getProbeDSL(),
+                ddgi_->getDDGIParameters(),
+                });
+            //draw the batched mesh
+            {
+                cmdBuffer.cmdBindVertexBuffer(0, vertexBuffer, 0);
+                cmdBuffer.cmdBindIndexBuffer(indexBuffer, IndexFormat_U32, 0);
+
+                cmdBuffer.cmdDrawIndexed(numIndicesPerMesh, 1, 0, 0, 0);
+            }
+            cmdBuffer.cmdEndRendering();
+            renderContext_->submit(cmdBuffer);
         }
-        //{
-        //    ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
-        //    cmdBuffer.cmdTransitionImageLayout(renderTarget_, ImageLayout_COLOR_ATTACHMENT_OPTIMAL);
-        //    cmdBuffer.cmdTransitionImageLayout(depthAttachment, ImageLayout_DEPTH_ATTACHMENT_OPTIMAL);
-        //    ClearValue clearVal = {
-        //     .colorValue = {0.3,0.3,0.3,1.0},
-        //     .depthClearValue = 1.0,
-        //    };
-        //    cmdBuffer.cmdBeginRendering(renderTarget_, depthAttachment, &clearVal);
-        //    cmdBuffer.cmdBindGraphicsPipeline(renderPipeline);
-        //    std::pair<uint32_t, uint32_t> windowDimensions = renderContext_->getWindowSize();
-        //    cmdBuffer.cmdSetViewport(Viewport{
-        //        .width = (float)windowDimensions.first,
-        //        .height = (float)windowDimensions.second,
-        //        .minDepth = 0.0,
-        //        .maxDepth = 1.0 });
-        //    cmdBuffer.cmdSetScissor(Scissor{
-        //        .width = windowDimensions.first,
-        //        .height = windowDimensions.second,
-        //        });
-        //    cmdBuffer.cmdBindGraphicsDescriptorSets(0, renderPipeline, { mvpMatrixDescriptorSetLayout, meshDescriptorSet, shadowDescSetLayout });
-        //    //draw the batched mesh
-        //    {
-        //        cmdBuffer.cmdBindVertexBuffer(0, vertexBuffer, 0);
-        //        cmdBuffer.cmdBindIndexBuffer(indexBuffer, IndexFormat_U32, 0);
 
-        //        cmdBuffer.cmdDrawIndexed(numIndicesPerMesh, 1, 0, 0, 0);
-        //    }
-        //    cmdBuffer.cmdEndRendering();
-        //    renderContext_->submit(cmdBuffer);
-        //}
-
+        if (Renderer::isFirstFrame)
+            Renderer::isFirstFrame = false;
     }
 
 }

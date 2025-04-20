@@ -523,7 +523,7 @@ namespace Gaia {
 		//Todo glslang to load shaders
 		ShaderModuleState shaderModuleState
 		{
-			.pushConstantSize = 0, //TODO change this based on number of push-constants
+			.pushConstantSize = static_cast<uint32_t>(desc.pushConstantSize),
 		};
 		shaderModuleState.sm = loadShaderModule(desc.shaderPath_SPIRV, vkDevice_);
 
@@ -733,6 +733,15 @@ namespace Gaia {
 		getPipeline(handle);
 		return {this, handle};
 	}
+	Holder<ComputePipelineHandle> VulkanContext::createComputePipeline(const ComputePipelineDesc& desc)
+	{
+		ComputePipelineState cps{
+			.desc_ = desc,
+		};
+		ComputePipelineHandle handle = computePipelinePool_.Create(std::move(cps));
+		getPipeline(handle);
+		return {this, handle};
+	}
 	void VulkanContext::destroy(BufferHandle handle)
 	{
 		VulkanBuffer* buffer = bufferPool_.get(handle);
@@ -831,6 +840,22 @@ namespace Gaia {
 			vkDestroyPipeline(device, pipeline, nullptr);
 			}));
 		rayTracingPipelinePool_.Destroy(handle);
+	}
+
+	void VulkanContext::destroy(ComputePipelineHandle handle)
+	{
+		ComputePipelineState* cps = computePipelinePool_.get(handle);
+
+		deferredTask(std::packaged_task<void()>([device = vkDevice_, pl = cps->pipelineLayout_]() {
+			vkDestroyPipelineLayout(device, pl, nullptr);
+			}
+		));
+
+		deferredTask(std::packaged_task<void()>([device = vkDevice_, pipeline = cps->pipeline_]() {
+			vkDestroyPipeline(device, pipeline, VK_NULL_HANDLE);
+			}
+		));
+		computePipelinePool_.Destroy(handle);
 	}
 
 	TextureHandle VulkanContext::getCurrentSwapChainTexture()
@@ -959,11 +984,35 @@ namespace Gaia {
 				descSetLayouts.push_back(descSet->layout_.descSetLayout);
 		}
 
+		std::vector<VkPushConstantRange> pcRanges;
+		if (smsVertex && smsVertex->pushConstantSize)
+		{
+			pcRanges.push_back(VkPushConstantRange{ VK_SHADER_STAGE_VERTEX_BIT, 0, smsVertex->pushConstantSize });
+		}
+		if (smsFrag && smsFrag->pushConstantSize)
+		{
+			pcRanges.push_back(VkPushConstantRange{ VK_SHADER_STAGE_FRAGMENT_BIT, 0, smsFrag->pushConstantSize });
+		}
+		if (smsTesc && smsTesc->pushConstantSize)
+		{
+			pcRanges.push_back(VkPushConstantRange{ VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT, 0, smsTesc->pushConstantSize });
+		}
+		if (smsTese && smsTese->pushConstantSize)
+		{
+			pcRanges.push_back(VkPushConstantRange{ VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, 0, smsTese->pushConstantSize });
+		}
+		if (smsGeo && smsGeo->pushConstantSize)
+		{
+			pcRanges.push_back(VkPushConstantRange{ VK_SHADER_STAGE_GEOMETRY_BIT, 0, smsGeo->pushConstantSize });
+		}
+
 		VkPipelineLayoutCreateInfo pl_ci
 		{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 			.setLayoutCount = (uint32_t)descSetLayouts.size(),
 			.pSetLayouts = descSetLayouts.data(),
+			.pushConstantRangeCount = static_cast<uint32_t>(pcRanges.size()),
+			.pPushConstantRanges = pcRanges.data(),
 		};
 		vkCreatePipelineLayout(vkDevice_, &pl_ci, nullptr, &rps->pipelineLayout_);
 
@@ -1025,7 +1074,7 @@ namespace Gaia {
 		{
 			return rtps->pipeline_;
 		}
-		//createing a simple pipeline layout without any push constant
+		
 		std::vector<VkDescriptorSetLayout> descSetLayouts;
 		uint32_t numLayouts = rtps->desc_.getNumDescriptorSetLayouts();
 		for (int i = 0; i < numLayouts; i++)
@@ -1053,11 +1102,43 @@ namespace Gaia {
 
 		GAIA_ASSERT(mRgen != nullptr, "");
 
+		//push Constants
+		std::vector<VkPushConstantRange> pcRanges;
+		if (mRgen && mRgen->pushConstantSize)
+		{
+			pcRanges.push_back(VkPushConstantRange{ VK_SHADER_STAGE_RAYGEN_BIT_KHR, 0, mRgen->pushConstantSize });
+		}
+		if (mAHit && mAHit->pushConstantSize)
+		{
+			pcRanges.push_back(VkPushConstantRange{ VK_SHADER_STAGE_ANY_HIT_BIT_KHR, 0, mAHit->pushConstantSize });
+		}
+		if (mCHit && mCHit->pushConstantSize)
+		{
+			pcRanges.push_back(VkPushConstantRange{ VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 0, mCHit->pushConstantSize });
+		}
+		if (mInter && mInter->pushConstantSize)
+		{
+			pcRanges.push_back(VkPushConstantRange{ VK_SHADER_STAGE_INTERSECTION_BIT_KHR, 0, mInter->pushConstantSize });
+		}
+		if (mCall && mCall->pushConstantSize)
+		{
+			pcRanges.push_back(VkPushConstantRange{ VK_SHADER_STAGE_CALLABLE_BIT_KHR, 0, mCall->pushConstantSize });
+		}
+		//all miss shaders
+		for (int i = 0; i < numMissShaders; i++)
+		{
+			if (mMiss[i] && mMiss[i]->pushConstantSize)
+			{
+				pcRanges.push_back(VkPushConstantRange{ VK_SHADER_STAGE_MISS_BIT_KHR, 0, mMiss[i]->pushConstantSize});
+			}
+		}
 		VkPipelineLayoutCreateInfo plci{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 			.flags = 0,
 			.setLayoutCount = static_cast<uint32_t>(descSetLayouts.size()),
 			.pSetLayouts = descSetLayouts.data(),
+			.pushConstantRangeCount = static_cast<uint32_t>(pcRanges.size()),
+			.pPushConstantRanges = pcRanges.data(),
 		};
 		VkResult res = vkCreatePipelineLayout(vkDevice_, &plci, nullptr, &rtps->pipelineLayout_);
 
@@ -1231,6 +1312,57 @@ if(shaderModuleState)\
 			.size = handleSizeAligned,
 		};
 		return rtps->pipeline_;
+	}
+	VkPipeline VulkanContext::getPipeline(ComputePipelineHandle handle)
+	{
+		ComputePipelineState* cps = computePipelinePool_.get(handle);
+		GAIA_ASSERT(cps, "");
+
+		ShaderModuleState* sms_compute = shaderModulePool_.get(cps->desc_.smComp);
+		GAIA_ASSERT(sms_compute, "");
+
+		std::vector<VkDescriptorSetLayout> dsl;
+		for (int i = 0; i < cps->desc_.getNumDescriptorSetLayouts(); i++)
+		{
+			if (cps->desc_.descriptorSetLayout[i].isValid())
+			{
+				VulkanDescriptorSet* ds = descriptorSetPool_.get(cps->desc_.descriptorSetLayout[i]);
+				dsl.push_back(ds->layout_.descSetLayout);
+			}
+		}
+
+		VkPipelineShaderStageCreateInfo ssci = vkutil::getPipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, sms_compute->sm, cps->desc_.enteryPoint, VK_NULL_HANDLE);
+		
+		VkPushConstantRange pc_range
+		{
+			.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+			.offset = 0,
+			.size = sms_compute->pushConstantSize,
+		};
+
+		VkPipelineLayoutCreateInfo pl_ci
+		{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+			.flags = 0,
+			.setLayoutCount = static_cast<uint32_t>(dsl.size()),
+			.pSetLayouts = dsl.data(),
+			.pushConstantRangeCount = pc_range.size > 0 ? 1u:0u,
+			.pPushConstantRanges = &pc_range,
+		};
+		auto res = vkCreatePipelineLayout(vkDevice_, &pl_ci, VK_NULL_HANDLE, &cps->pipelineLayout_);
+		GAIA_ASSERT(res == VK_SUCCESS, "");
+
+		VkComputePipelineCreateInfo cpci
+		{
+			.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+			.flags = 0,
+			.stage = ssci,
+			.layout = cps->pipelineLayout_,
+		};
+		res = vkCreateComputePipelines(vkDevice_, VK_NULL_HANDLE, 1, &cpci, VK_NULL_HANDLE, &cps->pipeline_);
+		GAIA_ASSERT(res == VK_SUCCESS, "");
+
+		return cps->pipeline_;
 	}
 	AccelStructHandle VulkanContext::BuildTLAS(AccelStructDesc& desc)
 	{
@@ -3050,12 +3182,28 @@ if(shaderModuleState)\
 		}
 		vkCmdBindIndexBuffer(commandBufferWraper_->cmdBuffer_, indxBuffer->vkBuffer_, indexBufferOffset, type);
 	}
-	void VulkanCommandBuffer::cmdPushConstants(const void* data, size_t size, size_t offset)
+	void VulkanCommandBuffer::cmdPushConstants(RenderPipelineHandle handle, uint32_t shaderStageFlags, const void* data, size_t size, size_t offset)
 	{
+		RenderPipelineState* rps = ctx_->renderPipelinePool_.get(handle);
+		GAIA_ASSERT(rps, "");
+		vkCmdPushConstants(commandBufferWraper_->cmdBuffer_, rps->pipelineLayout_, getVkShaderStageFromShaderStage(shaderStageFlags), static_cast<uint32_t>(offset), static_cast<uint32_t>(size), data);
+	}
+	void VulkanCommandBuffer::cmdPushConstants(RayTracingPipelineHandle handle, uint32_t shaderStageFlags, const void* data, size_t size, size_t offset)
+	{
+		RayTracingPipelineState* rtps = ctx_->rayTracingPipelinePool_.get(handle);
+		GAIA_ASSERT(rtps, "");
+		vkCmdPushConstants(commandBufferWraper_->cmdBuffer_, rtps->pipelineLayout_, getVkShaderStageFromShaderStage(shaderStageFlags), static_cast<uint32_t>(offset), static_cast<uint32_t>(size), data);
+	}
+	void VulkanCommandBuffer::cmdPushConstants(ComputePipelineHandle handle, uint32_t shaderStageFlags, const void* data, size_t size, size_t offset)
+	{
+		ComputePipelineState* cps = ctx_->computePipelinePool_.get(handle);
+		GAIA_ASSERT(cps, "");
+		vkCmdPushConstants(commandBufferWraper_->cmdBuffer_, cps->pipelineLayout_, getVkShaderStageFromShaderStage(shaderStageFlags), static_cast<uint32_t>(offset), static_cast<uint32_t>(size), data);
 	}
 	void VulkanCommandBuffer::cmdBindGraphicsDescriptorSets(uint32_t firstSet, RenderPipelineHandle pipeline, const std::vector<DescriptorSetLayoutHandle>& descriptorSetLayouts)
 	{
 		RenderPipelineState* rps = ctx_->renderPipelinePool_.get(pipeline);
+		GAIA_ASSERT(rps, "");
 		std::vector<VkDescriptorSet> vkDescSets(descriptorSetLayouts.size());
 		for (int i = 0; i < descriptorSetLayouts.size(); i++)
 		{
@@ -3068,6 +3216,7 @@ if(shaderModuleState)\
 	void VulkanCommandBuffer::cmdBindRayTracingDescriptorSets(uint32_t firstSet, RayTracingPipelineHandle pipeline, const std::vector<DescriptorSetLayoutHandle>& descriptorSetLayouts)
 	{
 		RayTracingPipelineState* rtps = ctx_->rayTracingPipelinePool_.get(pipeline);
+		GAIA_ASSERT(rtps, "");
 		std::vector<VkDescriptorSet> vkDescSets(descriptorSetLayouts.size());
 		for (int i = 0; i < descriptorSetLayouts.size(); i++)
 		{
@@ -3078,6 +3227,21 @@ if(shaderModuleState)\
 		vkCmdBindDescriptorSets(commandBufferWraper_->cmdBuffer_, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, rtps->pipelineLayout_, firstSet, (uint32_t)descriptorSetLayouts.size(), vkDescSets.data(), 0, nullptr);
 	}
 
+	void VulkanCommandBuffer::cmdBindComputeDescriptorSets(uint32_t firstSet, ComputePipelineHandle pipeline, const std::vector<DescriptorSetLayoutHandle>& descriptorSetLayouts)
+	{
+		ComputePipelineState* cps = ctx_->computePipelinePool_.get(pipeline);
+		GAIA_ASSERT(cps, "");
+
+		std::vector<VkDescriptorSet> vkDescSets(descriptorSetLayouts.size());
+		for (int i = 0; i < vkDescSets.size(); i++)
+		{
+			VulkanDescriptorSet* ds = ctx_->descriptorSetPool_.get(descriptorSetLayouts[i]);
+			vkDescSets[i] = ds->set_;
+		}
+
+		vkCmdBindDescriptorSets(commandBufferWraper_->cmdBuffer_, VK_PIPELINE_BIND_POINT_COMPUTE, cps->pipelineLayout_, firstSet, (uint32_t)descriptorSetLayouts.size(), vkDescSets.data(), 0, nullptr);
+	}
+
 	void VulkanCommandBuffer::cmdDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
 	{
 		vkCmdDraw(commandBufferWraper_->cmdBuffer_, vertexCount, instanceCount, firstVertex, firstInstance);
@@ -3085,6 +3249,16 @@ if(shaderModuleState)\
 	void VulkanCommandBuffer::cmdDrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, uint32_t vertexOffset, uint32_t firstInstance)
 	{
 		vkCmdDrawIndexed(commandBufferWraper_->cmdBuffer_, indexCount, instanceCount, firstInstance, vertexOffset, firstInstance);
+	}
+	void VulkanCommandBuffer::cmdBindComputePipeline(ComputePipelineHandle handle)
+	{
+		ComputePipelineState* cps = ctx_->computePipelinePool_.get(handle);
+		GAIA_ASSERT(cps, "");
+		vkCmdBindPipeline(commandBufferWraper_->cmdBuffer_, VK_PIPELINE_BIND_POINT_COMPUTE, cps->pipeline_);
+	}
+	void VulkanCommandBuffer::cmdDispatch(uint32_t workGroupSizeX, uint32_t workGroupSizeY, uint32_t workGroupSizeZ)
+	{
+		vkCmdDispatch(commandBufferWraper_->cmdBuffer_, workGroupSizeX, workGroupSizeY, workGroupSizeZ);
 	}
 	void VulkanCommandBuffer::cmdBlitImage(TextureHandle srcImageHandle, TextureHandle dstImageHandle)
 	{
@@ -3109,7 +3283,8 @@ if(shaderModuleState)\
 			.dstImage = dstImage->vkImage_,
 			.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			.regionCount = 1,
-			.pRegions = &imageBlit
+			.pRegions = &imageBlit,
+			.filter = VK_FILTER_LINEAR,
 		};
 		vkCmdBlitImage2(commandBufferWraper_->cmdBuffer_, &blitInfo);
 	}

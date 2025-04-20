@@ -32,6 +32,18 @@ namespace Gaia
 		//if (m_LOD.size() == 0)
 		//	m_LOD.push_back(this);
 		LoadObj(Path);
+
+		//create world space scene bounds
+		for (auto& subMesh : m_subMeshes)
+		{
+			for (int i=0;i<subMesh.Vertices.size();i++)
+			{
+				glm::mat4 modelTrans = transforms[subMesh.meshIndices[i]];
+				glm::vec4 ws_pos = modelTrans * glm::vec4(subMesh.Vertices[i], 1.0);
+				sceneBounds_.min = glm::min(sceneBounds_.min, glm::vec3(ws_pos));
+				sceneBounds_.max = glm::max(sceneBounds_.max, glm::vec3(ws_pos));
+			}
+		}
 	}
 	LoadMesh::~LoadMesh()
 	{
@@ -43,7 +55,6 @@ namespace Gaia
 		if (node.mesh != -1)
 		{
 			transforms.push_back(nodeTransform);
-			//LoadTransforms(node.mesh, nodeTransform);
 			LoadVertexData(node.mesh);
 		}
 		//TODO camera, Lights..
@@ -485,41 +496,7 @@ namespace Gaia
 		//	pbrMaterials.push_back(material);
 		//}
 	}
-	void LoadMesh::LoadTransforms(int nodeIndex, glm::mat4& parentTransform)
-	{
-		tinygltf::Node& node = model.nodes[nodeIndex];
-		if (node.matrix.size() == 16)
-		{
-			transforms[nodeIndex] = (glm::make_mat4x4(node.matrix.data()));
-		}
-		else {
-			glm::vec3 translation = glm::vec3(0.0);
-			glm::vec3 rotation = glm::vec3(0.0);
-			glm::vec3 scale = glm::vec3(1.0);
-
-			if (node.rotation.size() == 4)
-			{
-				float x = node.rotation[0];
-				float y = node.rotation[1];
-				float z = node.rotation[2];
-				float w = node.rotation[3];
-
-				glm::vec3 convert = glm::eulerAngles(glm::quat{ w,x,y,z });
-				rotation = convert;
-			}
-			if (node.scale.size() == 3)
-			{
-				scale = { node.scale[0], node.scale[1], node.scale[2] };
-			}
-			if (node.translation.size() == 3)
-			{
-				translation = { node.translation[0], node.translation[1], node.translation[2] };
-			}
-
-			transforms[nodeIndex] = (glm::translate(glm::mat4(1.0), translation) * glm::toMat4(glm::quat(rotation)) * glm::scale(glm::mat4(1.0), scale));
-		}
-		transforms[nodeIndex] = parentTransform * transforms[nodeIndex];
-	}
+	
 	glm::mat4 LoadMesh::getTransform(int nodeIndex)
 	{
 		tinygltf::Node& node = model.nodes[nodeIndex];
