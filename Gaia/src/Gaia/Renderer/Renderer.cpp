@@ -17,39 +17,104 @@ namespace Gaia
 
     void Renderer::onFirstFrame(Scene& scene)
     {
-        ShaderModuleDesc smVertexDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/vert_shader.spv", Stage_Vert);
-        ShaderModuleDesc smFragDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/frag_shader.spv", Stage_Frag);
-        vertexShaderModule = renderContext_->createShaderModule(smVertexDesc);
-        fragmentShaderModule = renderContext_->createShaderModule(smFragDesc);
+        //GBuffer render pipeline
+        {
+            ShaderModuleDesc smVertexDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/g_buffer.vert.spv", Stage_Vert);
+            ShaderModuleDesc smFragDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/g_buffer.frag.spv", Stage_Frag);
+            vertexShaderModule = renderContext_->createShaderModule(smVertexDesc);
+            fragmentShaderModule = renderContext_->createShaderModule(smFragDesc);
 
-        RenderPipelineDesc rps{
+            RenderPipelineDesc rps{
+                .topology = Topology_Triangle,
+                .smVertex = vertexShaderModule,
+                .smFragment = fragmentShaderModule,
+                .depthFormat = Format_Z_F32,
+                .cullMode = CullMode_Back,
+                .windingMode = WindingMode_CCW,
+                .polygonMode = PolygonMode_Fill,
+            };
+
+            //albedo
+            rps.colorAttachments[0].format = Format_RGBA_UN8;
+            rps.colorAttachments[0].blendEnabled = false;
+            rps.colorAttachments[0].alphaBlendOp = BlendOp_Add;
+            rps.colorAttachments[0].rgbBlendOp = BlendOp_Add;
+            rps.colorAttachments[0].srcAlphaBlendFactor = BlendFactor_One;
+            rps.colorAttachments[0].dstAlphaBlendFactor = BlendFactor_One;
+            rps.colorAttachments[0].srcRGBBlendFactor = BlendFactor_SrcAlpha;
+            rps.colorAttachments[0].dstRGBBlendFactor = BlendFactor_OneMinusSrcAlpha;
+
+            //metallic roughness
+            rps.colorAttachments[1].format = Format_RGBA_UN8;
+            rps.colorAttachments[1].blendEnabled = false;
+
+            //normal
+            rps.colorAttachments[2].format = Format_RGBA_F16;
+            rps.colorAttachments[2].blendEnabled = false;
+
+
+            rps.descriptorSetLayout[0] = mvpMatrixDescriptorSetLayout;
+            rps.descriptorSetLayout[1] = meshDescriptorSet;
+
+            rps.vertexInput = vertexInput;
+
+            renderPipelineGBuffer = renderContext_->createRenderPipeline(rps);
+        }
+
+
+        //gi render pipeline
+        {
+            ShaderModuleDesc smGIVertexDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/global_illumination.vert.spv", Stage_Vert);
+            ShaderModuleDesc smGIFragDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/global_illumination.frag.spv", Stage_Frag);
+            Holder<ShaderModuleHandle> giVertexShaderModule = renderContext_->createShaderModule(smGIVertexDesc);
+            Holder<ShaderModuleHandle> giFragmentShaderModule = renderContext_->createShaderModule(smGIFragDesc);
+
+            RenderPipelineDesc giRps{
+             .topology = Topology_Triangle,
+             .smVertex = giVertexShaderModule,
+             .smFragment = giFragmentShaderModule,
+             .depthFormat = Format_Invalid,
+             .cullMode = CullMode_None,
+             .windingMode = WindingMode_CCW,
+             .polygonMode = PolygonMode_Fill,
+            };
+            giRps.colorAttachments[0].format = Format_RGBA_UN8;
+            giRps.colorAttachments[0].blendEnabled = false;
+
+            giRps.descriptorSetLayout[0] = mvpMatrixDescriptorSetLayout;
+            giRps.descriptorSetLayout[1] = gBufferDescSetLayout;
+            giRps.descriptorSetLayout[2] = ddgi_->getProbeDSL(); //get the DDGI probe irradiance and depth images DSL
+            giRps.descriptorSetLayout[3] = ddgi_->getDDGIParametersDSL();
+
+            renderPipelineGI = renderContext_->createRenderPipeline(giRps);
+        }
+
+        //deferred render pipeline
+        {
+            ShaderModuleDesc smVertexDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/deferred.vert.spv", Stage_Vert);
+            ShaderModuleDesc smFragDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/deferred.frag.spv", Stage_Frag);
+            Holder<ShaderModuleHandle> giVertexShaderModule = renderContext_->createShaderModule(smVertexDesc);
+            Holder<ShaderModuleHandle> giFragmentShaderModule = renderContext_->createShaderModule(smFragDesc);
+
+            RenderPipelineDesc deffRpDesc{
             .topology = Topology_Triangle,
-            .smVertex = vertexShaderModule,
-            .smFragment = fragmentShaderModule,
-            .depthFormat = Format_Z_F32,
-            .cullMode = CullMode_Back,
+            .smVertex = giVertexShaderModule,
+            .smFragment = giFragmentShaderModule,
+            .depthFormat = Format_Invalid,
+            .cullMode = CullMode_None,
             .windingMode = WindingMode_CCW,
             .polygonMode = PolygonMode_Fill,
-        };
+            };
+            deffRpDesc.colorAttachments[0].format = Format_RGBA_SRGB8;
+            deffRpDesc.colorAttachments[0].blendEnabled = false;
 
-        rps.colorAttachments[0].format = Format_RGBA_SRGB8;
-        rps.colorAttachments[0].blendEnabled = true;
-        rps.colorAttachments[0].alphaBlendOp = BlendOp_Add;
-        rps.colorAttachments[0].rgbBlendOp = BlendOp_Add;
-        rps.colorAttachments[0].srcAlphaBlendFactor = BlendFactor_One;
-        rps.colorAttachments[0].dstAlphaBlendFactor = BlendFactor_One;
-        rps.colorAttachments[0].srcRGBBlendFactor = BlendFactor_SrcAlpha;
-        rps.colorAttachments[0].dstRGBBlendFactor = BlendFactor_OneMinusSrcAlpha;
+            deffRpDesc.descriptorSetLayout[0] = mvpMatrixDescriptorSetLayout;
+            deffRpDesc.descriptorSetLayout[1] = shadowDescSetLayout;
+            deffRpDesc.descriptorSetLayout[2] = gBufferDescSetLayout; //get the DDGI probe irradiance and depth images DSL
+            deffRpDesc.descriptorSetLayout[3] = giOutputDescSetLayout;
 
-        rps.descriptorSetLayout[0] = mvpMatrixDescriptorSetLayout;
-        rps.descriptorSetLayout[1] = meshDescriptorSet;
-        rps.descriptorSetLayout[2] = shadowDescSetLayout;
-        rps.descriptorSetLayout[3] = ddgi_->getProbeDSL(); //get the DDGI probe irradiance and depth images DSL
-        rps.descriptorSetLayout[4] = ddgi_->getDDGIParameters();
-
-        rps.vertexInput = vertexInput;
-
-        renderPipeline = renderContext_->createRenderPipeline(rps);
+            renderPipelineDeferred = renderContext_->createRenderPipeline(deffRpDesc);
+        }
     }
 
     Renderer::Renderer(void* window, Scene& scene)
@@ -91,12 +156,25 @@ namespace Gaia
 
         auto windowSize = renderContext_->getWindowSize();
 
-        TextureDesc rtDesc{
+        TextureDesc gBuffRtDesc{
             .type = TextureType_2D,
-            .format = Format_RGBA_SRGB8,
+            .format = Format_RGBA_UN8,
             .dimensions = {windowSize.first, windowSize.second, 1},
-            .usage = TextureUsageBits_Attachment,
+            .usage = TextureUsageBits_Attachment | TextureUsageBits_Sampled,
             .storage = StorageType_Device,
+        };
+        giTexture = renderContext_->createTexture(gBuffRtDesc);
+        gBufferAlbedo = renderContext_->createTexture(gBuffRtDesc);
+        gBufferMetallicRoughness = renderContext_->createTexture(gBuffRtDesc);
+        gBuffRtDesc.format = Format_RGBA_F16;
+        gBufferNormal = renderContext_->createTexture(gBuffRtDesc);
+
+        TextureDesc rtDesc{
+           .type = TextureType_2D,
+           .format = Format_RGBA_SRGB8,
+           .dimensions = {windowSize.first, windowSize.second, 1},
+           .usage = TextureUsageBits_Attachment,
+           .storage = StorageType_Device,
         };
         renderTarget_ = renderContext_->createTexture(rtDesc);
 
@@ -145,7 +223,7 @@ namespace Gaia
             .type = TextureType_2D,
             .format = Format_Z_F32,
             .dimensions = {windowSize.first, windowSize.second, 1},
-            .usage = TextureUsageBits_Attachment,
+            .usage = TextureUsageBits_Attachment | TextureUsageBits_Sampled,
             .storage = StorageType_Device,
         };
 
@@ -185,7 +263,7 @@ namespace Gaia
         lightMatricesBufferStaging = renderContext_->createBuffer(lightMatrixBufferDesc);
         
 
-        //
+        //create descriptor sets
         std::vector<DescriptorSetLayoutDesc> layoutDesc{
             DescriptorSetLayoutDesc{
                 .binding = 0,
@@ -299,6 +377,67 @@ namespace Gaia
         };
 
         geometryBufferAddressDescSetLayout = renderContext_->createDescriptorSetLayout(geometryBufferAddressDSLDesc);
+
+        //GBuffer descriptor sets
+        //transition to a correct layout
+        {
+            ICommandBuffer& cmdBuf = renderContext_->acquireCommandBuffer();
+            cmdBuf.cmdTransitionImageLayout(depthAttachment, ImageLayout_SHADER_READ_ONLY_OPTIMAL);
+            cmdBuf.cmdTransitionImageLayout(gBufferAlbedo, ImageLayout_SHADER_READ_ONLY_OPTIMAL);
+            cmdBuf.cmdTransitionImageLayout(gBufferMetallicRoughness, ImageLayout_SHADER_READ_ONLY_OPTIMAL);
+            cmdBuf.cmdTransitionImageLayout(gBufferNormal, ImageLayout_SHADER_READ_ONLY_OPTIMAL);
+            cmdBuf.cmdTransitionImageLayout(giTexture, ImageLayout_SHADER_READ_ONLY_OPTIMAL);
+            renderContext_->submit(cmdBuf);
+        }
+        std::vector<DescriptorSetLayoutDesc> gBufferDSLDesc{
+           DescriptorSetLayoutDesc{
+            .binding = 0,
+            .descriptorCount = 1,
+            .descriptorType = DescriptorType_CombinedImageSampler,
+            .shaderStage = Stage_Frag | Stage_Vert,
+            .texture = DescriptorSetLayoutDesc::getResource<TextureHandle>(depthAttachment),
+            .sampler = imageSampler,
+          },
+           DescriptorSetLayoutDesc{
+            .binding = 1,
+            .descriptorCount = 1,
+            .descriptorType = DescriptorType_CombinedImageSampler,
+            .shaderStage = Stage_Frag | Stage_Vert,
+            .texture = DescriptorSetLayoutDesc::getResource<TextureHandle>(gBufferAlbedo),
+            .sampler = imageSampler,
+          },
+          DescriptorSetLayoutDesc{
+            .binding = 2,
+            .descriptorCount = 1,
+            .descriptorType = DescriptorType_CombinedImageSampler,
+            .shaderStage = Stage_Frag | Stage_Vert,
+            .texture = DescriptorSetLayoutDesc::getResource<TextureHandle>(gBufferMetallicRoughness),
+            .sampler = imageSampler,
+          },
+          DescriptorSetLayoutDesc{
+            .binding = 3,
+            .descriptorCount = 1,
+            .descriptorType = DescriptorType_CombinedImageSampler,
+            .shaderStage = Stage_Frag | Stage_Vert,
+            .texture = DescriptorSetLayoutDesc::getResource<TextureHandle>(gBufferNormal),
+            .sampler = imageSampler,
+          },
+        };
+
+        gBufferDescSetLayout = renderContext_->createDescriptorSetLayout(gBufferDSLDesc);
+
+        std::vector<DescriptorSetLayoutDesc> giDSLDesc
+        {
+             DescriptorSetLayoutDesc{
+            .binding = 0,
+            .descriptorCount = 1,
+            .descriptorType = DescriptorType_CombinedImageSampler,
+            .shaderStage = Stage_Frag | Stage_Vert,
+            .texture = DescriptorSetLayoutDesc::getResource<TextureHandle>(giTexture),
+            .sampler = imageSampler,
+          },
+        };
+        giOutputDescSetLayout = renderContext_->createDescriptorSetLayout(giDSLDesc);
 
         ShaderModuleDesc rayGenShaderDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/rayGen.rgen.spv", Stage_RayGen);
         ShaderModuleDesc missShaderDesc("E:/Gaia/Gaia/src/Gaia/Renderer/Shaders/rayMiss.rmiss.spv", Stage_Miss);
@@ -680,17 +819,17 @@ namespace Gaia
         }*/
         {
             ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
-            cmdBuffer.cmdTransitionImageLayout(renderTarget_, ImageLayout_COLOR_ATTACHMENT_OPTIMAL);
+            cmdBuffer.cmdTransitionImageLayout(gBufferAlbedo, ImageLayout_COLOR_ATTACHMENT_OPTIMAL);
+            cmdBuffer.cmdTransitionImageLayout(gBufferMetallicRoughness, ImageLayout_COLOR_ATTACHMENT_OPTIMAL);
+            cmdBuffer.cmdTransitionImageLayout(gBufferNormal, ImageLayout_COLOR_ATTACHMENT_OPTIMAL);
             cmdBuffer.cmdTransitionImageLayout(depthAttachment, ImageLayout_DEPTH_ATTACHMENT_OPTIMAL);
             ClearValue clearVal = {
              .colorValue = {0.3,0.3,0.3,1.0},
              .depthClearValue = 1.0,
             };
-            cmdBuffer.cmdTransitionImageLayout(ddgi_->getProbeIrradianceImage(), ImageLayout_SHADER_READ_ONLY_OPTIMAL);
-            cmdBuffer.cmdTransitionImageLayout(ddgi_->getProbeDepthImage(), ImageLayout_SHADER_READ_ONLY_OPTIMAL);
 
-            cmdBuffer.cmdBeginRendering(renderTarget_, depthAttachment, &clearVal);
-            cmdBuffer.cmdBindGraphicsPipeline(renderPipeline);
+            cmdBuffer.cmdBeginRendering({gBufferAlbedo, gBufferMetallicRoughness, gBufferNormal}, depthAttachment, &clearVal);
+            cmdBuffer.cmdBindGraphicsPipeline(renderPipelineGBuffer);
             std::pair<uint32_t, uint32_t> windowDimensions = renderContext_->getWindowSize();
             cmdBuffer.cmdSetViewport(Viewport{
                 .width = (float)windowDimensions.first,
@@ -701,12 +840,9 @@ namespace Gaia
                 .width = windowDimensions.first,
                 .height = windowDimensions.second,
                 });
-            cmdBuffer.cmdBindGraphicsDescriptorSets(0, renderPipeline, {
+            cmdBuffer.cmdBindGraphicsDescriptorSets(0, renderPipelineGBuffer, {
                 mvpMatrixDescriptorSetLayout,
                 meshDescriptorSet,
-                shadowDescSetLayout,
-                ddgi_->getProbeDSL(),
-                ddgi_->getDDGIParameters(),
                 });
             //draw the batched mesh
             {
@@ -715,6 +851,80 @@ namespace Gaia
 
                 cmdBuffer.cmdDrawIndexed(numIndicesPerMesh, 1, 0, 0, 0);
             }
+            cmdBuffer.cmdEndRendering();
+            renderContext_->submit(cmdBuffer);
+        }
+
+        //global illumination pass
+        {
+            ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
+            cmdBuffer.cmdTransitionImageLayout(giTexture, ImageLayout_COLOR_ATTACHMENT_OPTIMAL);
+            cmdBuffer.cmdTransitionImageLayout(ddgi_->getProbeIrradianceImage(), ImageLayout_SHADER_READ_ONLY_OPTIMAL);
+            cmdBuffer.cmdTransitionImageLayout(ddgi_->getProbeDepthImage(), ImageLayout_SHADER_READ_ONLY_OPTIMAL);
+            cmdBuffer.cmdTransitionImageLayout(depthAttachment, ImageLayout_SHADER_READ_ONLY_OPTIMAL);
+            cmdBuffer.cmdTransitionImageLayout(gBufferAlbedo, ImageLayout_SHADER_READ_ONLY_OPTIMAL);
+            cmdBuffer.cmdTransitionImageLayout(gBufferMetallicRoughness, ImageLayout_SHADER_READ_ONLY_OPTIMAL);
+            cmdBuffer.cmdTransitionImageLayout(gBufferNormal, ImageLayout_SHADER_READ_ONLY_OPTIMAL);
+
+            ClearValue clearVal = {
+             .colorValue = {1.0,1.0,0.3,1.0},
+             .depthClearValue = 1.0,
+            };
+            cmdBuffer.cmdBeginRendering(giTexture, {}, &clearVal);
+            cmdBuffer.cmdBindGraphicsPipeline(renderPipelineGI);
+            std::pair<uint32_t, uint32_t> windowDimensions = renderContext_->getWindowSize();
+            cmdBuffer.cmdSetViewport(Viewport{
+                .width = (float)windowDimensions.first,
+                .height = (float)windowDimensions.second,
+                .minDepth = 0.0,
+                .maxDepth = 1.0 });
+            cmdBuffer.cmdSetScissor(Scissor{
+                .width = windowDimensions.first,
+                .height = windowDimensions.second,
+                });
+            cmdBuffer.cmdBindGraphicsDescriptorSets(0, renderPipelineGI, {
+                mvpMatrixDescriptorSetLayout,
+                gBufferDescSetLayout,
+                ddgi_->getProbeDSL(),
+                ddgi_->getDDGIParametersDSL(),
+                });
+            cmdBuffer.cmdDraw(3, 1, 0, 0);
+            cmdBuffer.cmdEndRendering();
+            renderContext_->submit(cmdBuffer);
+        }
+        //deferred render pass
+        {
+            ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
+            cmdBuffer.cmdTransitionImageLayout(renderTarget_, ImageLayout_COLOR_ATTACHMENT_OPTIMAL);
+            cmdBuffer.cmdTransitionImageLayout(giTexture, ImageLayout_SHADER_READ_ONLY_OPTIMAL);
+            cmdBuffer.cmdTransitionImageLayout(depthAttachment, ImageLayout_SHADER_READ_ONLY_OPTIMAL);
+            cmdBuffer.cmdTransitionImageLayout(gBufferAlbedo, ImageLayout_SHADER_READ_ONLY_OPTIMAL);
+            cmdBuffer.cmdTransitionImageLayout(gBufferMetallicRoughness, ImageLayout_SHADER_READ_ONLY_OPTIMAL);
+            cmdBuffer.cmdTransitionImageLayout(gBufferNormal, ImageLayout_SHADER_READ_ONLY_OPTIMAL);
+
+            ClearValue clearVal = {
+             .colorValue = {0.5,0.6,1.0,1.0},
+             .depthClearValue = 1.0,
+            };
+            cmdBuffer.cmdBeginRendering(renderTarget_, {}, &clearVal);
+            cmdBuffer.cmdBindGraphicsPipeline(renderPipelineDeferred);
+            std::pair<uint32_t, uint32_t> windowDimensions = renderContext_->getWindowSize();
+            cmdBuffer.cmdSetViewport(Viewport{
+                .width = (float)windowDimensions.first,
+                .height = (float)windowDimensions.second,
+                .minDepth = 0.0,
+                .maxDepth = 1.0 });
+            cmdBuffer.cmdSetScissor(Scissor{
+                .width = windowDimensions.first,
+                .height = windowDimensions.second,
+                });
+            cmdBuffer.cmdBindGraphicsDescriptorSets(0, renderPipelineDeferred, {
+                mvpMatrixDescriptorSetLayout,
+                shadowDescSetLayout,
+                gBufferDescSetLayout,
+                giOutputDescSetLayout,
+                });
+            cmdBuffer.cmdDraw(3, 1, 0, 0);
             cmdBuffer.cmdEndRendering();
             renderContext_->submit(cmdBuffer);
         }

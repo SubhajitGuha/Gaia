@@ -9,6 +9,15 @@ const float EPSILON = 1.0e-16;
 
 const float transmission_wt = 0.0;
 
+struct GBufferData
+{
+    vec3 position;
+    vec3 albedo;
+    vec3 normal;
+    float metallic;
+    float roughness;
+};
+
 struct ShadingMaterial{
 	vec3 base_color;
 	float metallic;
@@ -421,3 +430,47 @@ BSDFEvaluate evaluate(Triangle hitTriangle, vec3 view, vec3 light, uint sample_f
     total_eval.f *= get_shadowing_factor(light, geo_normal_ff, hitTriangle.frame.n);
     return total_eval;
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Renormalized Disney diffuse formula to be energy conserving 
+// https://seblagarde.files.wordpress.com/2015/07/course_notes_moving_frostbite_to_pbr_v32.pdf
+// 3.1.3 Energy conservation
+//
+float disneyDiffuse(float NdotV, float NdotL, float LdotH, float linearRoughness)
+{
+    float energyBias = mix(0, 0.5, linearRoughness);
+    float energyFactor = mix(1.0, 1.0 / 1.51, linearRoughness);
+    float fd90 = energyBias + 2.0 * LdotH * LdotH * linearRoughness;
+    vec3 f0 = vec3(1.0f, 1.0f, 1.0f);
+    float lightScatter = fresnel_schlick_eval(f0, fd90, NdotL).r;
+    float viewScatter = fresnel_schlick_eval(f0, fd90, NdotV).r;
+
+    return lightScatter * viewScatter * energyFactor / PI;
+}
+
+vec3 diffuseBRDFForGI(vec3 viewDir, in GBufferData gBuffer)
+{
+
+    // Since Disney diffuse if not uniform in all directions like Lambert,
+    // ideally we would precompute irradiance with Disney diffuse term computed for each ray,
+    // but instead we do it a bit hacky and apply single term to whole irradiance
+    vec3 L = gBuffer.normal;
+    vec3 H = normalize(L + viewDir);
+    float NdotV = dot(gBuffer.normal, viewDir);
+    float LdotH = dot(H, L);
+    float NdotH = LdotH;
+
+    vec3 f0 = mix(vec3(0.04), gBuffer.albedo, gBuffer.metallic);
+    vec3 F = fresnel_schlick_eval(f0, 1.0, NdotH);
+    vec3 diffuse = disneyDiffuse(NdotV, 1.0, LdotH, gBuffer.roughness) * (1.0-gBuffer.metallic) * gBuffer.albedo * (1.0-F);
+
+    return diffuse;
+}
+
+//vec3 cookTorranceBRDF(vec3 w0, vec3 wi, vec3 wm, GBufferData gBuffer)
+//{
+//
+//    float roughness2 = gBuffer.roughness * gBuffer.roughness;
+//    float NdotL = clamp()
+//    return vec3(1.0);
+//}

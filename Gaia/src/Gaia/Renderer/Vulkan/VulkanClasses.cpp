@@ -3090,6 +3090,86 @@ if(shaderModuleState)\
 		};
 		vkCmdBeginRendering(commandBufferWraper_->cmdBuffer_, &renderingInfo);
 	}
+	void VulkanCommandBuffer::cmdBeginRendering(const std::vector<TextureHandle>& colorAttachmentHandles, TextureHandle depthTextureHandle, ClearValue* clearValue)
+	{
+		std::vector<VulkanImage*> colorImages;
+		VulkanImage* depthImage = ctx_->texturesPool_.get(depthTextureHandle);
+
+		//collect the color attachments
+		for (int i = 0; i < colorAttachmentHandles.size(); i++)
+		{
+			colorImages.push_back(ctx_->texturesPool_.get(colorAttachmentHandles[i]));
+		}
+
+		std::vector<VkRenderingAttachmentInfo> colorAttachmentInfos;
+		
+		for (VulkanImage*& colorImage : colorImages)
+		{
+			colorAttachmentInfos.push_back({
+				.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+				.imageView = colorImage->imageView_,
+				.imageLayout = colorImage->vkImageLayout_,
+				.loadOp = clearValue ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD,
+				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+				});
+		}
+		
+
+		if (clearValue)
+		{
+			for (VkRenderingAttachmentInfo& colorAttachmentInfo : colorAttachmentInfos)
+			{
+				colorAttachmentInfo.clearValue = VkClearValue
+				{
+					.color = {clearValue->colorValue[0], clearValue->colorValue[1], clearValue->colorValue[2], clearValue->colorValue[3]},
+				};
+			}
+		}
+
+		//TODO give support for resolve operation for msaa textures
+		VkRenderingAttachmentInfo depthAttachmentInfo{};
+		if (depthImage) //if depth image is there
+		{
+			depthAttachmentInfo = {
+				.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+				.imageView = depthImage->imageView_,
+				.imageLayout = depthImage->vkImageLayout_,
+				.loadOp = clearValue ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD,
+				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+				.clearValue = VkClearValue
+				{
+					.depthStencil = {clearValue->depthClearValue, clearValue->stencilClearValue},
+				}
+			};
+		}
+
+		uint32_t width = 1;
+		uint32_t height = 1;
+
+		if (colorImages.size() > 0)
+		{
+			width = colorImages[0]->vkExtent_.width;
+			height = colorImages[0]->vkExtent_.height;
+		}
+		else if (depthImage)
+		{
+			width = depthImage->vkExtent_.width;
+			height = depthImage->vkExtent_.height;
+		}
+		else {
+			GAIA_ASSERT(true, "both color and depth attachment are null");
+		}
+		//no stencil for now
+		VkRenderingInfo renderingInfo{
+			.sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+			.renderArea = VkRect2D{.offset = {0,0},.extent = {width, height }},
+			.layerCount = 1,
+			.colorAttachmentCount = static_cast<uint32_t>(colorImages.size()),
+			.pColorAttachments = !colorImages.empty() ? colorAttachmentInfos.data() : VK_NULL_HANDLE,
+			.pDepthAttachment = depthImage ? &depthAttachmentInfo : VK_NULL_HANDLE,
+		};
+		vkCmdBeginRendering(commandBufferWraper_->cmdBuffer_, &renderingInfo);
+	}
 	void VulkanCommandBuffer::cmdEndRendering()
 	{
 		vkCmdEndRendering(commandBufferWraper_->cmdBuffer_);

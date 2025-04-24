@@ -55,7 +55,14 @@ namespace Gaia
 		Holder<TextureHandle> renderTarget_;
 		Holder<TextureHandle> rtOutputTexture; //storage texture that stores the ray-tracing output
 
-		Holder<RenderPipelineHandle> renderPipeline;
+		//this renders into GBuffer textures
+		Holder<RenderPipelineHandle> renderPipelineGBuffer;
+		//deferred pipeline that shades the pixels
+		Holder<RenderPipelineHandle> renderPipelineDeferred;
+		//Gi pass render pipeline
+		Holder<RenderPipelineHandle> renderPipelineGI;
+
+
 		Holder<RayTracingPipelineHandle> rtPipeline;
 		//Holder<RayTracingPipelineHandle> fullScreenPipeline;
 
@@ -84,9 +91,17 @@ namespace Gaia
 		Holder<BufferHandle> indexBuffer;
 		Holder<BufferHandle> indexBufferRT; //need a seperate index buffer with out the offset applied for ray tracing
 
+		//gbuffer data.
 		Holder<TextureHandle> depthAttachment;
+		Holder<TextureHandle> gBufferAlbedo;
+		Holder<TextureHandle> gBufferNormal;
+		Holder<TextureHandle> gBufferMetallicRoughness;
+		Holder<TextureHandle> giTexture;
+
 		std::vector<Holder<TextureHandle>> glTfTextures;
+
 		Holder<BufferHandle> materialsBuffer;
+
 		Holder<SamplerHandle> imageSampler;
 		Holder<SamplerHandle> shadowImageSampler;
 
@@ -97,6 +112,8 @@ namespace Gaia
 		Holder<DescriptorSetLayoutHandle> accelStructureDescSetLayout;
 		Holder<DescriptorSetLayoutHandle> geometryBufferAddressDescSetLayout;
 		Holder<DescriptorSetLayoutHandle> rayTraceImageDescSetLayout;
+		Holder<DescriptorSetLayoutHandle> gBufferDescSetLayout;
+		Holder<DescriptorSetLayoutHandle> giOutputDescSetLayout;
 
 		MVPMatrices mvpData = {};
 

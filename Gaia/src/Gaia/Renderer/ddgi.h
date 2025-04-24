@@ -19,7 +19,7 @@ namespace Gaia
 		void update(Scene& scene);
 		//get the DDGI probe irradiance and depth images DSL
 		inline DescriptorSetLayoutHandle getProbeDSL() { return probeReadDSL; }
-		inline DescriptorSetLayoutHandle getDDGIParameters() { return ddgiParametersDSL; }
+		inline DescriptorSetLayoutHandle getDDGIParametersDSL() { return ddgiParametersDSL; }
 		inline TextureHandle getProbeIrradianceImage() { return probeIrradianceImage; };
 		inline TextureHandle getProbeDepthImage() { return probeDepthImage; };
 
@@ -37,12 +37,12 @@ namespace Gaia
 		struct Probe
 		{
 			float probeDistance = 1.0f;
-			float recursiveEnergyPreservation = 0.85f;
+			float recursiveEnergyPreservation = 0.95f;
 			uint32_t irradianceOctSize = 8;
 			uint32_t depthOctSize = 16;
 			float hysteresis = 0.99;
 			float depthSharpness = 25.0f;
-			float normalBias = 0.3f;
+			float normalBias = 0.25f;
 			float maxDistance = 4.0f;
 			uint32_t raysPerProbe = 256;
 			float irradianceDistanceBias = 0.0f;

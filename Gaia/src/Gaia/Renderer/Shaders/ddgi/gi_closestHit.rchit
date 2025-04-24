@@ -77,6 +77,8 @@ struct Hit{
 	vec3 incommingLight;
 	uint payloadSeed;
 	float rayDistance;
+	vec3 rOrigin;
+	vec3 rDirection;
 };
 layout (location = 0) rayPayloadInEXT Hit hitValue; //incoming payload
 layout (location = 1) rayPayloadEXT float shadowHitVal; //shadow payload
@@ -103,13 +105,13 @@ float power_heuristic(float f, float g)
 {
 	 return (f * f) / (f * f + g * g);
 }
-vec3 sampleLight(Triangle hitTriangle, vec3 V)
+vec3 sampleLight(Triangle hitTriangle, vec3 V, vec3 c_diffuse)
 {
 	float dirLightPDF = 1.0;//pdf for sampling a directional light is always 1.0;
 	BSDFEvaluate bsdf = evaluate(hitTriangle, V, -normalize(lightParameters.direction), BSDF_FLAG_ALL);
-	vec3 color = lightParameters.color * lightParameters.intensity;
+	vec3 color = lightParameters.color * lightParameters.intensity * c_diffuse;
 	{
-		color *= bsdf.f / dirLightPDF;
+		//color *= bsdf.f / dirLightPDF;
 	}
 	return color;
 }
@@ -126,6 +128,7 @@ Frame get_shading_frame(vec3 normal)
 }
 
 ShadingMaterial shadingMaterial;
+float alpha;
 // This function will unpack our vertex buffer data into a single triangle and calculates uv coordinates
 Triangle unpackTriangle(uint index) {
 	Triangle tri;
@@ -166,19 +169,20 @@ Triangle unpackTriangle(uint index) {
 	tri.frame = f;
 
 	Material mat = material.materials[matId];
-	vec3 color = mat.baseColorTexture!= -1 ? texture(textures[mat.baseColorTexture], tri.uv).rgb : mat.baseColorFactor.xyz;
+	vec4 color = mat.baseColorTexture!= -1 ? texture(textures[mat.baseColorTexture], tri.uv) : mat.baseColorFactor;
 	vec3 textureNormal = mat.normalTexture != -1 ? texture(textures[mat.normalTexture], tri.uv).rgb : vec3(0.0);
 	vec3 metallicRoughness = mat.metallicRoughnessTexture != -1 ? texture(textures[mat.metallicRoughnessTexture], tri.uv).rgb : vec3(1.0);
 	float roughness =  metallicRoughness.g * mat.roughnessFactor;
 	float metalness = metallicRoughness.b * mat.metallicFactor;
 
-	shadingMaterial.base_color = color;
+	shadingMaterial.base_color = color.rgb;
+	alpha = color.a;
 	shadingMaterial.metallic = metalness;
 	shadingMaterial.roughness = roughness;
 
 	tri.material = shadingMaterial;
-	tri.material.metallic = 0.0;
-	//tri.material.roughness = 1.0;
+	//tri.material.metallic = 0.0;
+	//tri.material.roughness = 0.98;
 
 	if(length(textureNormal) > 0.0)
 	{
@@ -207,15 +211,15 @@ vec3 fresnel_schlick_roughness(float cosTheta, vec3 F0, float roughness)
     return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(max(1.0 - cosTheta, 0.0), 5.0);
 }
 
-vec3 indirect_lighting(vec3 view_dir, vec3 N, vec3 P, vec3 F0)
+vec3 indirect_lighting(vec3 view_dir, vec3 N, vec3 P, vec3 F0, vec3 c_diffuse)
 {
-	vec3 F = fresnel_schlick_roughness(max(dot(N, view_dir), 0.0), F0, shadingMaterial.roughness);
-
-	vec3 kS = F;
-	vec3 kD = vec3(1.0) - kS;
-	kD *= (1.0 - shadingMaterial.metallic);
-
-	return kD * shadingMaterial.base_color * sample_irradiance(ddgi.parameters, P, N, view_dir, irradianceImage, depthImage);
+	//vec3 F = fresnel_schlick_roughness(max(dot(N, view_dir), 0.0), F0, shadingMaterial.roughness);
+	//
+	//vec3 kS = F;
+	//vec3 kD = vec3(1.0) - kS;
+	//kD *= (1.0 - shadingMaterial.metallic);
+	GBufferData gBufferData = GBufferData(P, shadingMaterial.base_color, N, shadingMaterial.metallic, shadingMaterial.roughness);
+	return diffuseBRDFForGI(view_dir, gBufferData) * sample_irradiance(ddgi.parameters, P, N, view_dir, irradianceImage, depthImage);
 }
 
 void main()
@@ -226,25 +230,36 @@ void main()
 	Triangle tri = unpackTriangle(gl_PrimitiveID);
 	vec3 view_dir = normalize(-gl_WorldRayDirectionEXT);
     const vec3 F0 = mix(vec3(0.04f), shadingMaterial.base_color, shadingMaterial.metallic);
-	
-	bsdf_info = Sample(tri, view_dir, samples);
+	GBufferData gBufferData = GBufferData(tri.position, shadingMaterial.base_color, tri.frame.n, shadingMaterial.metallic, shadingMaterial.roughness);
+	const vec3 c_diffuse = diffuseBRDFForGI(view_dir, gBufferData);
+	//const vec3 c_diffuse = mix(shadingMaterial.base_color * (vec3(1.0f) - F0), vec3(0.0f), shadingMaterial.metallic);
 
-	if(bsdf_info.pdf > 0.0)
-		hitValue.color *= bsdf_info.f/bsdf_info.pdf;
+	//bsdf_info = Sample(tri, view_dir, samples);
+
+	//if(bsdf_info.pdf > 0.0)
+		//hitValue.color *= bsdf_info.f/bsdf_info.pdf;
 	
 	shadowHitVal = 0.0;
 	float tmin = 0.001;
 	float tmax = 10000;
-	vec3 origin = tri.position + tri.frame.n * 0.001;
-	vec3 dir =  -normalize(lightParameters.direction);
-	traceRayEXT(topLevelAS, gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT,
-	0xff, 0,0,1, origin, tmin, dir, tmax, 1);
+	vec3 origin = tri.position + tri.normal * 0.001;
+	vec3 Ldir =  -normalize(lightParameters.direction);
 	
-	hitValue.incommingLight += sampleLight(tri, view_dir) * hitValue.color * shadowHitVal;
+	//hitValue.incommingLight += sampleLight(tri, view_dir, c_diffuse) * shadowHitVal;
+	hitValue.incommingLight += lightParameters.color * lightParameters.intensity * shadingMaterial.base_color;
+	if(alpha > 0.9) //dont do shadow testing with alpha geometry
+	{
+		traceRayEXT(topLevelAS, gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT | gl_RayFlagsOpaqueEXT,
+		0xff, 0,0,1, origin, tmin, Ldir, tmax, 1);
+		hitValue.incommingLight *= shadowHitVal;
+	}
+	
 
 	if(pushConstant.isFirstFrame == 0) //if not first frame
 	{
-		hitValue.incommingLight += indirect_lighting(view_dir, normalize(tri.frame.n), tri.position, F0);
+		hitValue.incommingLight += indirect_lighting(view_dir, normalize(tri.frame.n), tri.position, F0, c_diffuse);
 	}
 	hitValue.rayDistance = gl_RayTminEXT + gl_HitTEXT;
+	hitValue.rOrigin = origin;
+	hitValue.rDirection = bsdf_info.direction;
 }

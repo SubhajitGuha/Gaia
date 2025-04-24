@@ -1,29 +1,9 @@
 #version 450
 #extension GL_EXT_nonuniform_qualifier : enable
-#extension GL_GOOGLE_include_directive : require
-
-#include "ddgi/gi_commons.glsl"
-
-//shader input
-flat layout (location = 0) in uint materialId;
-layout(location = 1) in vec2 texCoord;
-layout(location = 2) in vec4 vertexPosition;
-layout(location = 3) in vec3 vertexNormal;
-layout(location = 4) in vec3 vertexTangent;
 
 #define MAX_CASCADES 8
 
-struct Material
-{
-	vec4 baseColorFactor;
-	float metallicFactor;
-	float roughnessFactor;
-	float normalStrength;
-
-	int baseColorTexture;
-	int metallicRoughnessTexture;
-	int normalTexture;
-};
+layout(location = 0) in vec2 texCoord;
 
 struct LightMatrices
 {
@@ -48,30 +28,26 @@ layout(set = 0, binding = 2) uniform LightParameters
 	vec3 direction;
 } lightParameters;
 
-layout(set = 1, binding = 0) readonly buffer materialLayout
-{
-	Material materials[];
-} materialBuffer;
-
-layout(set = 1, binding = 1) uniform sampler2D textures[];
-
-layout(set = 2, binding = 0) uniform LightMatricesLayout
+layout(set = 1, binding = 0) uniform LightMatricesLayout
 {
 	LightMatrices lightMatrices[MAX_CASCADES];
 } lightMatrixBuffer;
 
-layout(set = 2, binding = 1) uniform sampler2D shdowTextures[];
+layout(set = 1, binding = 1) uniform sampler2D shdowTextures[];
 
-//DDGI probe data
-layout(set = 3, binding = 0) uniform sampler2D irradianceImage;
-layout(set = 3, binding = 1) uniform sampler2D depthImage;
 
-layout(set = 4, binding = 0) uniform DdgiParametersLayout{
-	DdgiParameters parameters;
-}ddgi;
+//GBuffers
+layout(set = 2, binding = 0) uniform sampler2D gBufferDepth;
+layout(set = 2, binding = 1) uniform sampler2D gBufferAlbedo;
+layout(set = 2, binding = 2) uniform sampler2D gBufferMetallicRoughness;
+layout(set = 2, binding = 3) uniform sampler2D gBufferNormal;
 
-//output write
-layout (location = 0) out vec4 outFragColor;
+
+//GI output data
+layout(set = 3, binding = 0) uniform sampler2D giImage;
+
+
+layout(location = 0) out vec4 color;
 
 const float PI = 3.14159265359;
 const float ONE_BY_PI = 0.31830988618;
@@ -94,6 +70,9 @@ vec3 ACESFilm(vec3 x)
 	float e = 0.14;
 	return clamp((x*(a*x+b))/(x*(c*x+d)+e),0.0,1.0);
 }
+
+vec4 vertexPosition;
+vec3 vertexNormal;
 
 float NormalDistribution_GGX(float NdotH)
 {
@@ -223,30 +202,38 @@ float calculateShadow()
 const float GI_INTENSITY = 1.0;
 vec3 indirect_lighting(vec3 view_dir, vec3 N, vec3 P, vec3 kD, vec3 albedo)
 {
-	return GI_INTENSITY * kD * albedo * sample_irradiance(ddgi.parameters, P, N, view_dir, irradianceImage, depthImage);
+	return GI_INTENSITY * kD * albedo * texture(giImage, texCoord).rgb;
 }
 
-void main() 
+void main()
 {
-	Material mat = materialBuffer.materials[materialId];
-	vec4 clipSpace = cameraBuffer.projection * cameraBuffer.view * vertexPosition;
-	clipSpace.xyz /= clipSpace.w;
-	
-	vec2 cs_texCoord = clipSpace.xy * 0.5 + vec2(0.5);
-	vec4 albedo = mat.baseColorTexture!=-1? texture(textures[mat.baseColorTexture], texCoord): vec4(mat.baseColorFactor);
-	if (albedo.a < 0.02)
-	{
+	mat4 view_proj = cameraBuffer.view * cameraBuffer.projection;
+	//reconstruct position from depth;
+	float depth = texture(gBufferDepth, texCoord).r;
+	if(depth == 1.0)
 		discard;
-	}
-	vec4 matRoughness = mat.metallicRoughnessTexture!=-1?texture(textures[mat.metallicRoughnessTexture], texCoord):vec4(1.0);
-	roughness = matRoughness.g * mat.roughnessFactor;
-	metallic = matRoughness.b * mat.metallicFactor;
+	vec2 screenPosXY = texCoord * 2.0 - vec2(1.0);
+	vec4 screenSpaceVertPos = vec4(screenPosXY, depth, 1.0);
+	vec4 wsVertexPos = inverse(cameraBuffer.view) * inverse(cameraBuffer.projection) * screenSpaceVertPos;
+	//undo projection
+	wsVertexPos /= wsVertexPos.w;
+
+	vertexPosition = wsVertexPos;
+
+	vec3 N = texture(gBufferNormal, texCoord).rgb;
+	vertexNormal = N;
+
+	vec4 metallicRoughness = texture(gBufferMetallicRoughness, texCoord);
+	metallic = metallicRoughness.r;
+	roughness = metallicRoughness.g;
+
+	vec4 albedo = texture(gBufferAlbedo, texCoord);
 
 	vec3 DirectionalLight_Direction = normalize(-lightParameters.direction );//for directional light as it has no concept of position
-	vec3 EyeDirection = normalize( cameraBuffer.camPos - vertexPosition.xyz);
+	vec3 EyeDirection = normalize( cameraBuffer.camPos - wsVertexPos.xyz);
 
 	//diffuse_environment reflections
-	vec3 Light_dir_i = reflect(-EyeDirection,vertexNormal);
+	vec3 Light_dir_i = reflect(-EyeDirection,N);
 
 	//F0 is 0.04 for non-metallic and albedo for metallics 
 	F0 = vec3(0.04);
@@ -268,5 +255,6 @@ void main()
 	PBR_Color += GI.rgb;
 	//PBR_Color = pow(PBR_Color, vec3(1.0/2.2));
 	PBR_Color = ACESFilm(PBR_Color);
-	outFragColor = vec4(PBR_Color.rgb,1.0f);
+
+	color = vec4(PBR_Color, 1.0);
 }

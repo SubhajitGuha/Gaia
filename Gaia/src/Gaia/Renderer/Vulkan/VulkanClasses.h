@@ -383,6 +383,7 @@ namespace Gaia {
 		void cmdTransitionImageLayout(TextureHandle image, ImageLayout newLayout) override;
 		void cmdBindGraphicsPipeline(RenderPipelineHandle renderPipeline) override;
 		void cmdBeginRendering(TextureHandle colorAttachmentHandle, TextureHandle depthTextureHandle, ClearValue* clearValue) override;
+		void cmdBeginRendering(const std::vector<TextureHandle>& colorAttachmentHandles, TextureHandle depthTextureHandle, ClearValue* clearValue) override;
 		void cmdEndRendering() override;
 
 		void cmdCopyBufferToBuffer(BufferHandle srcBufferHandle, BufferHandle dstBufferHandle, uint32_t offset = 0) override;

@@ -1,5 +1,10 @@
-C:\VulkanSDK\1.3.296.0\Bin\glslc --target-spv=spv1.6 vert_shader.vert -o vert_shader.spv
-C:\VulkanSDK\1.3.296.0\Bin\glslc --target-spv=spv1.6 frag_shader.frag -o frag_shader.spv
+C:\VulkanSDK\1.3.296.0\Bin\glslc --target-spv=spv1.6 deferred/g_buffer.vert -o g_buffer.vert.spv
+C:\VulkanSDK\1.3.296.0\Bin\glslc --target-spv=spv1.6 deferred/g_buffer.frag -o g_buffer.frag.spv
+C:\VulkanSDK\1.3.296.0\Bin\glslc --target-spv=spv1.6 deferred/global_illumination.vert -o global_illumination.vert.spv
+C:\VulkanSDK\1.3.296.0\Bin\glslc --target-spv=spv1.6 deferred/global_illumination.frag -o global_illumination.frag.spv
+C:\VulkanSDK\1.3.296.0\Bin\glslc --target-spv=spv1.6 deferred/deferred.vert -o deferred.vert.spv
+C:\VulkanSDK\1.3.296.0\Bin\glslc --target-spv=spv1.6 deferred/deferred.frag -o deferred.frag.spv
+
 C:\VulkanSDK\1.3.296.0\Bin\glslc --target-spv=spv1.6 shadow.vert -o vert_shadow.spv
 C:\VulkanSDK\1.3.296.0\Bin\glslc --target-spv=spv1.6 shadow.frag -o frag_shadow.spv
 C:\VulkanSDK\1.3.296.0\Bin\glslc --target-spv=spv1.6 rayGen.rgen -o rayGen.rgen.spv

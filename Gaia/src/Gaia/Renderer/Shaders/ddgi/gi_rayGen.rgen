@@ -39,6 +39,8 @@ struct Hit{
 	vec3 incommingLight;
 	uint payloadSeed;
 	float rayDistance;
+	vec3 rOrigin;
+	vec3 rDirection;
 };
 layout (location = 0) rayPayloadEXT Hit hitValue;
 
@@ -65,7 +67,7 @@ void main()
 	int rayId = pixCoord.x;
 
 	vec3 origin = probe_location(ddgi.parameters, probeId);
-	vec3 direction = normalize(mat3(pushConstant.randomOrientation) * spherical_fibonacci(float(rayId), float(gl_LaunchSizeEXT.x))) ;
+	vec3 direction = normalize(mat3(pushConstant.randomOrientation) * spherical_fibonacci(float(rayId), float(256))) ;
 
 	float tmin = 0.001;
 	float tmax = 10000.0;
@@ -75,8 +77,14 @@ void main()
 
 	hitValue.rayDistance = tmax;
 
-	traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0,0,0, origin, tmin, direction, tmax, 0);
+	hitValue.rOrigin = origin;
+	hitValue.rDirection = direction;
 	
-	imageStore(radianceImage, ivec2(gl_LaunchIDEXT.xy), vec4(hitValue.incommingLight, 1.f));
+	//for(int i=1;i<=2;i++) //2 bounce
+	{
+		traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0,0,0, hitValue.rOrigin, tmin, hitValue.rDirection, tmax, 0);
+	}
+	
+	imageStore(radianceImage, ivec2(gl_LaunchIDEXT.xy), vec4(hitValue.incommingLight, 0.f));
 	imageStore(directionDepth, ivec2(gl_LaunchIDEXT.xy), vec4(direction, hitValue.rayDistance));
 }

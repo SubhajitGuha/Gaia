@@ -1226,5 +1226,11 @@
     <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_depth_border_update.comp" />
     <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_irradiance_border_update.comp" />
     <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_rayMissShadow.rmiss" />
+    <None Include="src\Gaia\Renderer\Shaders\deferred\deferred.vert" />
+    <None Include="src\Gaia\Renderer\Shaders\deferred\deferred.frag" />
+    <None Include="src\Gaia\Renderer\Shaders\deferred\g_buffer.vert" />
+    <None Include="src\Gaia\Renderer\Shaders\deferred\g_buffer.frag" />
+    <None Include="src\Gaia\Renderer\Shaders\deferred\global_illumination.vert" />
+    <None Include="src\Gaia\Renderer\Shaders\deferred\global_illumination.frag" />
   </ItemGroup>
 </Project>

@@ -178,7 +178,7 @@ namespace Gaia {
 		cmdBuffer.cmdEndRendering();
 		cmdBuffer.cmdTransitionImageLayout(renderTarget_, ImageLayout_TRANSFER_SRC_OPTIMAL);
 		cmdBuffer.cmdTransitionImageLayout(swapchainTex, ImageLayout_TRANSFER_DST_OPTIMAL);
-		cmdBuffer.cmdCopyImageToImage(renderTarget_, swapchainTex);
+		cmdBuffer.cmdBlitImage(renderTarget_, swapchainTex);
 		context_->submit(cmdBuffer, swapchainTex);
 
 		if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)

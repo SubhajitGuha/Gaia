@@ -775,6 +775,7 @@ namespace Gaia
 		virtual void cmdTransitionImageLayout(TextureHandle image, ImageLayout newLayout) = 0;
 		virtual void cmdBindGraphicsPipeline(RenderPipelineHandle renderPipeline) = 0;
 		virtual void cmdBeginRendering(TextureHandle colorAttachmentHandle, TextureHandle depthTextureHandle, ClearValue* clearValue) = 0;
+		virtual void cmdBeginRendering(const std::vector<TextureHandle>& colorAttachmentHandles, TextureHandle depthTextureHandle, ClearValue* clearValue) = 0;
 		virtual void cmdEndRendering() = 0;
 
 		virtual void cmdCopyBufferToBuffer(BufferHandle srcBufferHandle, BufferHandle dstBufferHandle, uint32_t offset = 0) = 0;

@@ -28,7 +28,7 @@ void main()
 	Material mat = materialBuffer.materials[materialId];
 
 	vec4 albedo = mat.baseColorTexture!=-1? texture(textures[mat.baseColorTexture], texCoord): vec4(mat.baseColorFactor);
-	if (albedo.a < 0.02)
+	if (albedo.a < 0.5)
 	{
 		discard;
 	}
