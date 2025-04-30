@@ -10,6 +10,7 @@ namespace Gaia
 	class Scene;
 	class DDGI
 	{
+		const glm::vec3 MAX_PROBES_PER_AXIS = glm::vec3(30.0f,30.0f,20.0f);
 	public:
 		DDGI(Renderer* renderer, Scene& scene);
 		~DDGI();
@@ -36,7 +37,7 @@ namespace Gaia
 		};
 		struct Probe
 		{
-			float probeDistance = 1.0f;
+			glm::vec3 probeDistance = glm::vec3(1.0f);
 			float recursiveEnergyPreservation = 0.95f;
 			uint32_t irradianceOctSize = 8;
 			uint32_t depthOctSize = 16;
@@ -113,6 +114,9 @@ namespace Gaia
 		void createTextures();
 		void createBuffers();
 		void createPipelines();
+
+		void updateTextures();
+		void updateBuffers();
 
 		void rayTrace();
 		void updateProbes();

@@ -2535,7 +2535,8 @@ if(shaderModuleState)\
 			.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT|VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
 			.queueFamilyIndex = queueFamilyIndex_,
 		};
-		vkCreateCommandPool(device, &cp_ci, nullptr, &commandPool_);
+		auto res = vkCreateCommandPool(device, &cp_ci, nullptr, &commandPool_);
+		GAIA_ASSERT(res == VK_SUCCESS, "");
 
 		//allocate command buffers
 		VkCommandBufferAllocateInfo ai =
@@ -2607,8 +2608,8 @@ if(shaderModuleState)\
 			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
 		};
 
-		vkBeginCommandBuffer(current->cmdBuffer_, &bi);
-
+		VkResult res = vkBeginCommandBuffer(current->cmdBuffer_, &bi);
+		GAIA_ASSERT(res == VK_SUCCESS, "");
 		nextSubmitHandle_ = current->handle_;
 		return *current;
 	}
@@ -2947,8 +2948,9 @@ if(shaderModuleState)\
 		
 	}
 	VulkanCommandBuffer::VulkanCommandBuffer(VulkanContext* ctx)
-		:ctx_(ctx), commandBufferWraper_(&ctx->immediateCommands_->acquire())
+		:ctx_(ctx)
 	{
+		commandBufferWraper_ = &ctx->immediateCommands_->acquire();
 	}
 	VulkanCommandBuffer::~VulkanCommandBuffer()
 	{

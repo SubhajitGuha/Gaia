@@ -29,7 +29,7 @@
 #ifdef GAIA_DEBUG
 #define GAIA_ASSERT(x,...) { if(!(x)) { GAIA_ERROR("Assertion Failed: {0}", __VA_ARGS__); GAIA_DEBUGBREAK(); } }
 #else
-#define GAIA_ASSERT(x, ...)
+#define GAIA_ASSERT(x,...) { x; }
 #endif
 #define BIT(x) (1<<x)
 #define GAMMA 2.2

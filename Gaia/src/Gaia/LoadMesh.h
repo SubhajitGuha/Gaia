@@ -30,8 +30,8 @@ namespace Gaia
 		std::vector<glm::vec3> BiTangent;
 		std::vector<glm::vec2> TexCoord;
 		std::vector<uint32_t> indices;
-		std::vector<uint32_t> m_MaterialID; //storing material id per vertex (might not be ideal)
-		std::vector<uint32_t> meshIndices; //storing mesh id per vertex (might not be ideal)
+		std::vector<uint32_t> m_MaterialID; //storing material id per vertex
+		std::vector<uint32_t> meshIndices; //storing mesh id per vertex
 
 		/*VkBufferCreator vk_mesh_vertex_buffer;
 		VkBufferCreator vk_mesh_index_buffer;*/
@@ -39,6 +39,13 @@ namespace Gaia
 		//ref<VertexArray> VertexArray;
 		uint32_t numVertices;
 		//Bounds mesh_bounds; //sub_mesh bounds
+	};
+	struct Hierarchy
+	{
+		int parent = -1;
+		int firstChild = -1;
+		int nextSibling = -1;
+		int level = -1;
 	};
 	struct SceneBounds
 	{
@@ -51,13 +58,9 @@ namespace Gaia
 		
 		LoadMesh();
 		LoadMesh(const std::string& Path);
+		void calculateSceneBounds();
 		~LoadMesh();
 		void clear() {
-			/*for (uint8_t*& texture : glTfTextures)
-			{
-				delete[] texture;
-				texture = nullptr;
-			}*/
 
 			gltfTextures.clear();
 			m_subMeshes.clear();
@@ -87,25 +90,26 @@ namespace Gaia
 			VertexAttributes() = default;
 		};
 		std::string m_path;
-		std::vector<SubMesh> m_subMeshes;
+		std::vector<std::string> m_nodeNames;
+		std::unordered_map<int, SubMesh> m_subMeshes;
 		std::vector<Material> pbrMaterials;
 		std::vector<Texture> gltfTextures;
-		std::vector<glm::mat4> transforms;
+		std::vector<glm::mat4> localTransforms;
+		std::vector<glm::mat4> globalTransforms;
+		std::vector<Hierarchy> m_hierarchy;
 	private:
-		std::string extension = ".asset";
-		std::string objectName;
-		std::vector<LoadMesh*> m_LOD;
-		std::vector<aiMesh*> m_Mesh;
 		tinygltf::Model model;
 		tinygltf::TinyGLTF loader;
 		int numMeshes = 0;//mesh count we get from gltf mesh
 	private:
-		void parse_scene_rec(tinygltf::Node& node, glm::mat4 nodeTransform, int parentIndex);
+		int addNode(int parentIndex, int level); //adds a new node to the hierarchy and returns the new node index
+		void parse_scene_rec(tinygltf::Node& node, glm::mat4 nodeTransform, int Index, int parentIndex, int level);
+		void getTotalNodes(tinygltf::Node& node, int& totalNodes);
 		void LoadObj(const std::string& Path);
 		void LoadTextures();
 		void LoadMatrials();
 		glm::mat4 getTransform(int nodeIndex);
-		void LoadVertexData(int mesh_index);
+		void LoadVertexData(int mesh_index, int hierarchyIndex, int level);
 		template <typename T>
 		int LoadAccessor(const tinygltf::Accessor& accessor, const T*& pointer, uint32_t* count = nullptr, int* type = nullptr)
 		{

@@ -471,8 +471,6 @@ namespace Gaia
     }
     void Renderer::createGpuMeshTexturesAndBuffers(Scene& scene)
     {
-        LoadMesh& mesh = scene.getMesh();
-
         //lamda function that constructs a texture handle and copies the gltf texture data to there
         auto textureFunction = [&](Texture& gltfTexture, Format _textureFormat) {
             Texture& texture = gltfTexture;
@@ -509,15 +507,19 @@ namespace Gaia
             };
 
         int numGpuTextures = 0;
-        for (int i = 0; i < mesh.pbrMaterials.size(); i++)
+        std::vector<Material>& pbrMaterials = scene.getMaterials();
+        std::vector<Texture>& gltfTextures = scene.getTextures();
+        std::vector<glm::mat4>& globalTransforms = scene.getGlobalTransforms();
+
+        for (int i = 0; i < pbrMaterials.size(); i++)
         {
-            Material& pbrMaterial = mesh.pbrMaterials[i];
+            Material& pbrMaterial = pbrMaterials[i];
 
             //albedo texture
             if (pbrMaterial.baseColorTexture != -1)
             {
                 textureFunction(
-                    mesh.gltfTextures[pbrMaterial.baseColorTexture],
+                    gltfTextures[pbrMaterial.baseColorTexture],
                     Format_RGBA_SRGB8);
                 pbrMaterial.baseColorTexture = numGpuTextures;
                 numGpuTextures++;
@@ -526,7 +528,7 @@ namespace Gaia
             if (pbrMaterial.normalTexture != -1)
             {
                 textureFunction(
-                    mesh.gltfTextures[pbrMaterial.normalTexture],
+                    gltfTextures[pbrMaterial.normalTexture],
                     Format_RGBA_UN8);
                 pbrMaterial.normalTexture = numGpuTextures;
                 numGpuTextures++;
@@ -535,7 +537,7 @@ namespace Gaia
             if (pbrMaterial.metallicRoughnessTexture != -1)
             {
                 textureFunction(
-                    mesh.gltfTextures[pbrMaterial.metallicRoughnessTexture],
+                    gltfTextures[pbrMaterial.metallicRoughnessTexture],
                     Format_RGBA_UN8);
                 pbrMaterial.metallicRoughnessTexture = numGpuTextures;
                 numGpuTextures++;
@@ -544,7 +546,7 @@ namespace Gaia
         BufferDesc matBufferDesc{
             .usage_type = BufferUsageBits_Storage,
             .storage_type = StorageType_Device,
-            .size = mesh.pbrMaterials.size() * sizeof(Material),
+            .size = pbrMaterials.size() * sizeof(Material),
         };
         materialsBuffer = renderContext_->createBuffer(matBufferDesc);
 
@@ -554,7 +556,7 @@ namespace Gaia
         BufferDesc transformBufferDesc{
             .usage_type = BufferUsageBits_Storage,
             .storage_type = StorageType_Device,
-            .size = mesh.transforms.size() * sizeof(glm::mat4),
+            .size = globalTransforms.size() * sizeof(glm::mat4),
         };
         transformsBuffer = renderContext_->createBuffer(transformBufferDesc);
 
@@ -564,8 +566,8 @@ namespace Gaia
         //copy the staging buffers to device visible buffers
         {
             ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
-            cmdBuffer.copyBuffer(materialsBufferStaging, mesh.pbrMaterials.data(), matBufferDesc.size);
-            cmdBuffer.copyBuffer(transformBufferStaging, mesh.transforms.data(), transformBufferDesc.size);
+            cmdBuffer.copyBuffer(materialsBufferStaging, pbrMaterials.data(), matBufferDesc.size);
+            cmdBuffer.copyBuffer(transformBufferStaging, globalTransforms.data(), transformBufferDesc.size);
             cmdBuffer.cmdCopyBufferToBuffer(materialsBufferStaging, materialsBuffer);
             cmdBuffer.cmdCopyBufferToBuffer(transformBufferStaging, transformsBuffer);
             renderContext_->submit(cmdBuffer);
@@ -580,16 +582,14 @@ namespace Gaia
 
     void Renderer::createStaticBuffers(Scene& scene) 
     {
-        LoadMesh& mesh = scene.getMesh();
-
         std::vector<LoadMesh::VertexAttributes> buffer;
         std::vector<uint32_t> indicesBuffer;
         std::vector<uint32_t> indicesBufferRT;
 
         int totalIndices = 0;
-        for (int k = 0; k < mesh.m_subMeshes.size(); k++)
+        for (auto& subMesh_ : scene.getMeshes())
         {
-            SubMesh& subMesh = mesh.m_subMeshes[k];
+            SubMesh& subMesh = subMesh_.second;
             for (int i = 0; i < subMesh.Vertices.size(); i++)
             {
                 glm::vec3 transformed_normals = (subMesh.Normal[i]);//re-orienting the normals (do not include translation as normals only needs to be orinted)
@@ -657,13 +657,13 @@ namespace Gaia
             renderContext_->submit(cmdBuffer);
         }
 
-        std::vector<MeshGPUBufferAddress> gpuAddresses;
         //create blas for every sub meshes and also record the gpu addresses
+        std::vector<MeshGPUBufferAddress> gpuAddresses;
         uint32_t offset = 0;
         uint32_t index_offset = 0;
-        for (int k = 0; k < mesh.m_subMeshes.size(); k++)
+        for (auto& subMesh_ : scene.getMeshes())
         {
-            SubMesh& subMesh = mesh.m_subMeshes[k];
+            SubMesh& subMesh = subMesh_.second;
             AccelStructDesc blasDesc{
                 .type = AccelStructType_BLAS,
                 .geometryType = AccelStructGeomType_Triangles,
@@ -704,20 +704,21 @@ namespace Gaia
         
         // Use transform matrices from the glTF nodes and convert to
         std::vector<glm::mat3x4> transformMatrices;
-        for (auto transform : mesh.transforms) {
+        for (auto& transform : scene.getGlobalTransforms()) {
             glm::mat3x4 transformMatrix{};
             auto m = glm::mat3x4(glm::transpose(transform));
             memcpy(&transformMatrix, (void*)&m, sizeof(glm::mat3x4));
             transformMatrices.push_back(transformMatrix);
         }
         std::vector<AccelStructInstance> instances;
-        for (int i = 0; i < mesh.m_subMeshes.size(); i++)
+        int index = 0;
+        for (auto& subMesh_ : scene.getMeshes())
         {
-            SubMesh& subMesh = mesh.m_subMeshes[i];
+            SubMesh& subMesh = subMesh_.second;
             instances.push_back({
                 .transform = transformMatrices[subMesh.meshIndices[0]],
                 .flags = AccelStructInstanceFlagBits_TriangleFacingCullDisable,
-                .accelerationStructureReference = renderContext_->gpuAddress(BLAS[i]),
+                .accelerationStructureReference = renderContext_->gpuAddress(BLAS[index++]),
                 });
         }
         
@@ -747,16 +748,79 @@ namespace Gaia
              .buildFlags = AccelStructBuildFlagBits_PreferFastTrace | AccelStructBuildFlagBits_AllowUpdate,
         };
         TLAS = renderContext_->createAccelerationStructure(tlasDesc);
-
-        mesh.clear();
     }
     void Renderer::update(Scene& scene)
     {
         if (Input::IsButtonPressed(0) || Input::IsButtonPressed(1) || Input::IsButtonPressed(2))
             Application::frameNum = 0;
+        if (scene.isTransformUpdated())
+        {
+            GAIA_CORE_INFO("transform updated");
+            scene.updateSceneBounds();
+            BufferDesc transformBufferDesc{
+               .usage_type = BufferUsageBits_Storage,
+               .storage_type = StorageType_HostVisible,
+               .size = scene.getGlobalTransforms().size() * sizeof(glm::mat4),
+            };
+            Holder<BufferHandle> transformBufferStaging = renderContext_->createBuffer(transformBufferDesc);
+
+            //copy the staging buffers to device visible buffers
+            {
+                ICommandBuffer& cmdBuffer = renderContext_->acquireCommandBuffer();
+                cmdBuffer.copyBuffer(transformBufferStaging, scene.getGlobalTransforms().data(), transformBufferDesc.size);
+                cmdBuffer.cmdCopyBufferToBuffer(transformBufferStaging, transformsBuffer);
+                renderContext_->submit(cmdBuffer);
+            }
+
+            ////update tlas
+            //// Use transform matrices from the glTF nodes and convert to
+            //std::vector<glm::mat3x4> transformMatrices;
+            //for (auto& transform : scene.getGlobalTransforms()) {
+            //    glm::mat3x4 transformMatrix{};
+            //    auto m = glm::mat3x4(glm::transpose(transform));
+            //    memcpy(&transformMatrix, (void*)&m, sizeof(glm::mat3x4));
+            //    transformMatrices.push_back(transformMatrix);
+            //}
+
+            //std::vector<AccelStructInstance> instances;
+            //int index = 0;
+            //for (auto& subMesh_ : scene.getMeshes())
+            //{
+            //    SubMesh& subMesh = subMesh_.second;
+            //    instances.push_back({
+            //        .transform = transformMatrices[subMesh.meshIndices[0]],
+            //        .flags = AccelStructInstanceFlagBits_TriangleFacingCullDisable,
+            //        .accelerationStructureReference = renderContext_->gpuAddress(BLAS[index++]),
+            //        });
+            //}
+
+            //BufferDesc instBufferDesc{
+            //    .usage_type = BufferUsageBits_AccelStructBuildInputReadOnly,
+            //    .storage_type = StorageType_HostVisible,
+            //    .size = sizeof(AccelStructInstance) * instances.size(),
+            //};
+            //Holder<BufferHandle> instanceBufferStaging = renderContext_->createBuffer(instBufferDesc);
+
+            ////copy the instances buffer
+            //{
+            //    auto& cmdBuffer = renderContext_->acquireCommandBuffer();
+            //    cmdBuffer.copyBuffer(instanceBufferStaging, instances.data(), instBufferDesc.size);
+            //    cmdBuffer.cmdCopyBufferToBuffer(instanceBufferStaging, instancesBuffer);
+            //    renderContext_->submit(cmdBuffer);
+            //}
+
+            //AccelStructDesc tlasDesc{
+            //     .type = AccelStructType_TLAS,
+            //     .geometryType = AccelStructGeomType_Instances,
+            //     .instancesBufferAddress = renderContext_->gpuAddress(instancesBuffer),
+            //     .buildrange = {.primitiveCount = static_cast<uint32_t>(instances.size())},
+            //     .buildFlags = AccelStructBuildFlagBits_PreferFastTrace | AccelStructBuildFlagBits_AllowUpdate,
+            //};
+            //TLAS = renderContext_->createAccelerationStructure(tlasDesc);
+        }
         shadows_->update(scene);
         ddgi_->update(scene);
-        LoadMesh& mesh = scene.getMesh();
+        //LoadMesh& mesh = scene.getMesh();
 
         EditorCamera& camera = scene.getMainCamera();
         mvpData.view = camera.GetViewMatrix();

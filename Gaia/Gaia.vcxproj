@@ -105,7 +105,7 @@
       <MinimalRebuild>false</MinimalRebuild>
       <StringPooling>true</StringPooling>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
-      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -168,13 +168,13 @@
     <ClInclude Include="src\Gaia\Renderer\Pool.h" />
     <ClInclude Include="src\Gaia\Renderer\Renderer.h" />
     <ClInclude Include="src\Gaia\Renderer\Shadows.h" />
-    <ClInclude Include="src\Gaia\Renderer\ddgi.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkBootstrap.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkBootstrapDispatch.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkInitializers.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VkUtils.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\VulkanClasses.h" />
     <ClInclude Include="src\Gaia\Renderer\Vulkan\volk.h" />
+    <ClInclude Include="src\Gaia\Renderer\ddgi.h" />
     <ClInclude Include="src\Gaia\Scene\Scene.h" />
     <ClInclude Include="src\Gaia\TimeSteps.h" />
     <ClInclude Include="src\Gaia\Window.h" />
@@ -487,11 +487,11 @@
     <ClCompile Include="src\Gaia\Renderer\GaiaRenderer.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Renderer.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Shadows.cpp" />
-    <ClCompile Include="src\Gaia\Renderer\ddgi.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkBootstrap.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkInitializers.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VkUtils.cpp" />
     <ClCompile Include="src\Gaia\Renderer\Vulkan\VulkanClasses.cpp" />
+    <ClCompile Include="src\Gaia\Renderer\ddgi.cpp" />
     <ClCompile Include="src\Gaia\Scene\Scene.cpp" />
     <ClCompile Include="src\Gaia\Window.cpp" />
     <ClCompile Include="src\Gaia\Window\WindowsInput.cpp" />
@@ -510,31 +510,6 @@
     <ProjectReference Include="vendor\imgui\ImGui.vcxproj">
       <Project>{C0FF640D-2C14-8DBE-F595-301E616989EF}</Project>
     </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="src\Gaia\Renderer\Shaders\brdf.glsl" />
-    <None Include="src\Gaia\Renderer\Shaders\closestHit.rchit" />
-    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_border_update.glsl" />
-    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_closestHit.rchit" />
-    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_commons.glsl" />
-    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_depth_border_update.comp" />
-    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_depth_probe_update.comp" />
-    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_irradiance_border_update.comp" />
-    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_irradiance_probe_update.comp" />
-    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_probe_update.glsl" />
-    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_rayGen.rgen" />
-    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_rayMiss.rmiss" />
-    <None Include="src\Gaia\Renderer\Shaders\ddgi\gi_rayMissShadow.rmiss" />
-    <None Include="src\Gaia\Renderer\Shaders\deferred\deferred.frag" />
-    <None Include="src\Gaia\Renderer\Shaders\deferred\deferred.vert" />
-    <None Include="src\Gaia\Renderer\Shaders\deferred\global_illumination.frag" />
-    <None Include="src\Gaia\Renderer\Shaders\deferred\global_illumination.vert" />
-    <None Include="src\Gaia\Renderer\Shaders\deferred\g_buffer.frag" />
-    <None Include="src\Gaia\Renderer\Shaders\deferred\g_buffer.vert" />
-    <None Include="src\Gaia\Renderer\Shaders\random.glsl" />
-    <None Include="src\Gaia\Renderer\Shaders\rayGen.rgen" />
-    <None Include="src\Gaia\Renderer\Shaders\rayMiss.rmiss" />
-    <None Include="src\Gaia\Renderer\Shaders\shadowMiss.rmiss" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

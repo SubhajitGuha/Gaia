@@ -42,11 +42,23 @@ namespace Gaia
 		height = dimension.second;
 
 		glm::vec3 extent = (bounds.max - bounds.min);
+		if (extent.x > MAX_PROBES_PER_AXIS.x)
+		{
+			probeData.probeDistance.x = extent.x / MAX_PROBES_PER_AXIS.x;
+		}
+		if (extent.y > MAX_PROBES_PER_AXIS.y)
+		{
+			probeData.probeDistance.y = extent.y / MAX_PROBES_PER_AXIS.y;
+		}
+		if (extent.z > MAX_PROBES_PER_AXIS.z)
+		{
+			probeData.probeDistance.z = extent.z / MAX_PROBES_PER_AXIS.z;
+		}
 		// Compute the number of probes along each axis.
 		// Add 2 more probes to fully cover scene.
 		probeData.probeCounts = glm::ivec3(extent / probeData.probeDistance) + glm::ivec3(2);
 		probeData.gridStartPosition = bounds.min;
-		probeData.maxDistance = probeData.probeDistance * 1.5f;
+		probeData.maxDistance = probeData.probeDistance.x * 1.5f;
 
 		randomGenerator = std::mt19937(randomDevice());
 		randomDistribution_no = std::uniform_real_distribution<float>(-1.0, 1.0);
@@ -72,6 +84,41 @@ namespace Gaia
 	}
 	void DDGI::update(Scene& scene)
 	{
+		//if (scene.isTransformUpdated())
+		//{
+		//	bounds.min = scene.getSceneBounds().min;
+		//	bounds.max = scene.getSceneBounds().max;
+
+		//	auto dimension = renderer->getContext()->getWindowSize();
+		//	width = dimension.first;
+		//	height = dimension.second;
+
+		//	glm::vec3 extent = (bounds.max - bounds.min);
+		//	if (extent.x > MAX_PROBES_PER_AXIS.x)
+		//	{
+		//		probeData.probeDistance.x = extent.x / MAX_PROBES_PER_AXIS.x;
+		//	}
+		//	if (extent.y > MAX_PROBES_PER_AXIS.y)
+		//	{
+		//		probeData.probeDistance.y = extent.y / MAX_PROBES_PER_AXIS.y;
+		//	}
+		//	if (extent.z > MAX_PROBES_PER_AXIS.z)
+		//	{
+		//		probeData.probeDistance.z = extent.z / MAX_PROBES_PER_AXIS.z;
+		//	}
+		//	// Compute the number of probes along each axis.
+		//	// Add 2 more probes to fully cover scene.
+		//	probeData.probeCounts = glm::ivec3(extent / probeData.probeDistance) + glm::ivec3(2);
+		//	probeData.gridStartPosition = bounds.min;
+		//	probeData.maxDistance = probeData.probeDistance.x * 1.5f;
+
+		//	randomGenerator = std::mt19937(randomDevice());
+		//	randomDistribution_no = std::uniform_real_distribution<float>(-1.0, 1.0);
+		//	randomDistribution_zo = std::uniform_real_distribution<float>(0.0, 1.0);
+
+		//	//updateTextures();
+		//	updateBuffers();
+		//}
 	}
 	void DDGI::createTextures()
 	{
@@ -134,7 +181,7 @@ namespace Gaia
 
 		ubo.gridStartPos = probeData.gridStartPosition;
 		ubo.maxDistance = probeData.maxDistance;
-		ubo.gridStep = glm::vec3(probeData.probeDistance);
+		ubo.gridStep = probeData.probeDistance;
 		ubo.depthSharpness = probeData.depthSharpness;
 		ubo.probeCounts = probeData.probeCounts;
 		ubo.hysteresis = probeData.hysteresis;
@@ -322,6 +369,82 @@ namespace Gaia
 		probeIrradianceBorderUpdatePipeline = context->createComputePipeline(probeBorderUpdatePipelineDesc);
 		probeBorderUpdatePipelineDesc.smComp = probeDepthBorderUpdateShader;
 		probeDepthBorderUpdatePipeline = context->createComputePipeline(probeBorderUpdatePipelineDesc);
+	}
+	void DDGI::updateTextures()
+	{
+		uint32_t totalProbes = probeData.probeCounts.x * probeData.probeCounts.y * probeData.probeCounts.z;
+		IContext* context = renderer->getContext();
+
+		TextureDesc rtTexDesc{
+			.type = TextureType_2D,
+			.format = Format_RGBA_F16,
+			.dimensions = {.width = probeData.raysPerProbe, .height = totalProbes, .depth = 1},
+			.usage = TextureUsageBits_Storage | TextureUsageBits_Sampled,
+			.storage = StorageType_Device,
+		};
+		rayTraceRadiance = context->createTexture(rtTexDesc);
+		rayTraceDirectionDepth = context->createTexture(rtTexDesc);
+
+		//store probes as octahedrons
+		irradianceWidth = (probeData.irradianceOctSize + 2) * probeData.probeCounts.x * probeData.probeCounts.y + 2;
+		irradianceHeight = (probeData.irradianceOctSize + 2) * probeData.probeCounts.z + 2;
+
+		depthWidth = (probeData.depthOctSize + 2) * probeData.probeCounts.x * probeData.probeCounts.y + 2;
+		depthHeight = (probeData.depthOctSize + 2) * probeData.probeCounts.z + 2;
+
+		TextureDesc probeTexDesc{
+			.type = TextureType_2D,
+			.format = Format_RGBA_F16,
+			.dimensions = {.width = static_cast<uint32_t>(irradianceWidth), .height = static_cast<uint32_t>(irradianceHeight), .depth = 1},
+			.usage = TextureUsageBits_Storage | TextureUsageBits_Sampled,
+			.storage = StorageType_Device,
+		};
+		probeIrradianceImage = context->createTexture(probeTexDesc);
+		probeTexDesc.dimensions = { static_cast<uint32_t>(depthWidth), static_cast<uint32_t>(depthHeight), 1 };
+		probeDepthImage = context->createTexture(probeTexDesc);
+
+
+		//transition the image layout
+		ICommandBuffer& cmdBuf = context->acquireCommandBuffer();
+		cmdBuf.cmdTransitionImageLayout(rayTraceRadiance, ImageLayout_GENERAL);
+		cmdBuf.cmdTransitionImageLayout(rayTraceDirectionDepth, ImageLayout_GENERAL);
+		cmdBuf.cmdTransitionImageLayout(probeIrradianceImage, ImageLayout_GENERAL);
+		cmdBuf.cmdTransitionImageLayout(probeDepthImage, ImageLayout_GENERAL);
+		context->submit(cmdBuf);
+	}
+	void DDGI::updateBuffers()
+	{
+		IContext* context = renderer->getContext();
+		DDGIUniform ubo;
+
+		ubo.gridStartPos = probeData.gridStartPosition;
+		ubo.maxDistance = probeData.maxDistance;
+		ubo.gridStep = probeData.probeDistance;
+		ubo.depthSharpness = probeData.depthSharpness;
+		ubo.probeCounts = probeData.probeCounts;
+		ubo.hysteresis = probeData.hysteresis;
+		ubo.normalBias = probeData.normalBias;
+		ubo.energyPreservation = probeData.recursiveEnergyPreservation;
+		ubo.irradianceProbeSideLength = probeData.irradianceOctSize;
+		ubo.irradianceTextureWidth = irradianceWidth;
+		ubo.irradianceTextureHeight = irradianceHeight;
+		ubo.depthProbeSideLength = probeData.depthOctSize;
+		ubo.depthTextureWidth = depthWidth;
+		ubo.depthTextureHeight = depthHeight;
+
+		BufferDesc uboBufdesc{
+			.usage_type = BufferUsageBits_Uniform,
+			.size = sizeof(DDGIUniform)
+		};
+
+		uboBufdesc.storage_type = StorageType_HostVisible;
+		Holder<BufferHandle> stagingBuffer = context->createBuffer(uboBufdesc);
+
+		//copy the buffers
+		ICommandBuffer& cmdBuf = context->acquireCommandBuffer();
+		cmdBuf.copyBuffer(stagingBuffer, &ubo, sizeof(DDGIUniform));
+		cmdBuf.cmdCopyBufferToBuffer(stagingBuffer, ddgiParametersBuffer);
+		context->submit(cmdBuf);
 	}
 	void DDGI::rayTrace()
 	{
